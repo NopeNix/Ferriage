@@ -368,6 +368,64 @@ var tools = []tool{
 			return "POST", "/hosts/onboard", jsonBody(body), nil
 		},
 	},
+	{
+		Name:        "list_backups",
+		Description: "List restic snapshots in this peer's backup repo (newest first): repo status, snapshot ids, times, tags. The repo password is never returned.",
+		ReadOnly:    true,
+		Properties:  map[string]any{},
+		Required:    nil,
+		build: func(args map[string]any) (string, string, []byte, error) {
+			return "GET", "/backup", nil, nil
+		},
+	},
+	{
+		Name:        "run_backup",
+		Description: "Back up now (incremental restic): one stack when 'stack' is set, the whole node when empty. Deduplicated against prior snapshots.",
+		ReadOnly:    false,
+		Properties: map[string]any{
+			"stack": map[string]any{"type": "string", "description": "Stack name (empty = whole node)"},
+		},
+		Required: nil,
+		build: func(args map[string]any) (string, string, []byte, error) {
+			body := map[string]any{}
+			if s := stringArg(args, "stack"); s != "" {
+				body["stack"] = s
+			}
+			return "POST", "/backup/run", jsonBody(body), nil
+		},
+	},
+	{
+		Name:        "restore_backup",
+		Description: "Restore a snapshot (empty 'snapshot' = latest of that stack) into a fresh stack dir + volumes, then deploy health-gated. Refuses if the stack already exists.",
+		ReadOnly:    false,
+		Destructive: true,
+		Properties: map[string]any{
+			"stack":    map[string]any{"type": "string", "description": "Stack name to restore as"},
+			"snapshot": map[string]any{"type": "string", "description": "Snapshot id (empty = latest)"},
+		},
+		Required: []string{"stack"},
+		build: func(args map[string]any) (string, string, []byte, error) {
+			stack := stringArg(args, "stack")
+			if stack == "" {
+				return "", "", nil, fmt.Errorf("restore_backup requires argument \"stack\"")
+			}
+			body := map[string]any{"stack": stack}
+			if s := stringArg(args, "snapshot"); s != "" {
+				body["snapshot"] = s
+			}
+			return "POST", "/backup/restore", jsonBody(body), nil
+		},
+	},
+	{
+		Name:        "forget_backups",
+		Description: "Apply retention pruning to the restic repo (keep last N snapshots, default 7). Returns the outcome.",
+		ReadOnly:    false,
+		Properties:  map[string]any{},
+		Required:    nil,
+		build: func(args map[string]any) (string, string, []byte, error) {
+			return "POST", "/backup/forget", nil, nil
+		},
+	},
 }
 
 // findTool looks up a tool by name (nil when unknown).

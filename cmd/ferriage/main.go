@@ -21,6 +21,10 @@
 // ferriage [--peer URL] [--json] update check <stack>
 // ferriage [--peer URL] [--json] update policy <stack> --policy poll|auto [--interval DUR]
 // ferriage [--peer URL] [--json] update run <stack>
+// ferriage [--peer URL] [--json] backup
+// ferriage [--peer URL] [--json] backup run [--stack NAME]
+// ferriage [--peer URL] [--json] backup restore --stack NAME [--snapshot ID]
+// ferriage [--peer URL] [--json] backup forget
 // ferriage [--peer URL] [--json] mcp
 // ferriage [--peer URL] [--json] mcp tools
 // ferriage [--peer URL] [--json] mcp call <tool> --args '<json>'
@@ -68,6 +72,10 @@ Usage:
   ferriage [--peer URL] [--json] update check <stack>
   ferriage [--peer URL] [--json] update policy <stack> --policy poll|auto [--interval DUR]
   ferriage [--peer URL] [--json] update run <stack>
+  ferriage [--peer URL] [--json] backup
+  ferriage [--peer URL] [--json] backup run [--stack NAME]
+  ferriage [--peer URL] [--json] backup restore --stack NAME [--snapshot ID]
+  ferriage [--peer URL] [--json] backup forget
   ferriage [--peer URL] [--json] mcp
   ferriage [--peer URL] [--json] mcp tools
   ferriage [--peer URL] [--json] mcp call <tool> --args '<json>'
@@ -482,10 +490,108 @@ func run(args []string, stdout, stderr io.Writer) error {
 		return nil
 	case "update":
 		return runUpdate(c, opts, argv, stdout)
+	case "backup":
+		return runBackup(c, opts, argv, stdout)
 	case "mcp":
 		return runMCP(c, opts, argv, stdout)
 	default:
 		return usageErr("unknown command %q", cmd)
+	}
+}
+
+// runBackup is the CLI twin of the restic backup surfaces
+// (ADR 0011): list, run, restore, forget. Backup never asks
+// for the repo password — it is env/file-only on the peer.
+func runBackup(c *client, opts options, argv []string, stdout io.Writer) error {
+	if len(argv) == 0 {
+		var resp api.BackupList
+		if err := c.get("/backup", &resp); err != nil {
+			return err
+		}
+		if opts.json {
+			return writeJSON(stdout, &resp)
+		}
+		st := resp.Status
+		if !st.Initialized {
+			_, _ = fmt.Fprintln(stdout, "backup repo not initialized (run a backup first)")
+			return nil
+		}
+		_, _ = fmt.Fprintf(stdout, "repo %s: %d snapshot(s), password_set=%v\n", st.Repo, st.Snapshots, st.PasswordSet)
+		for _, s := range resp.Snapshots {
+			_, _ = fmt.Fprintf(stdout, "  %s %s tags=%v size=%d\n", s.ID, s.Time, s.Tags, s.Size)
+		}
+		if st.LastBackupAt != "" {
+			_, _ = fmt.Fprintf(stdout, "last backup: %s ok=%v\n", st.LastBackupAt, st.LastBackupOK)
+		}
+		return nil
+	}
+	switch argv[0] {
+	case "run":
+		req := api.BackupRunRequest{}
+		for i := 1; i < len(argv); i++ {
+			if argv[i] == "--stack" && i+1 < len(argv) {
+				i++
+				req.Stack = argv[i]
+			} else {
+				return usageErr("backup run: unknown arg %q (want --stack NAME)", argv[i])
+			}
+		}
+		var resp api.BackupResult
+		if err := c.postJSON("/backup/run", jsonBytes(req), &resp); err != nil {
+			return err
+		}
+		if opts.json {
+			return writeJSON(stdout, &resp)
+		}
+		_, _ = fmt.Fprintf(stdout, "backup %s (stack %q): snapshot %s — %s\n", resp.Scope, resp.Stack, resp.Snapshot, resp.Detail)
+		return nil
+	case "restore":
+		req := api.BackupRestoreRequest{}
+		for i := 1; i < len(argv); i++ {
+			switch argv[i] {
+			case "--stack":
+				if i+1 >= len(argv) {
+					return usageErr("backup restore --stack needs a value")
+				}
+				i++
+				req.Stack = argv[i]
+			case "--snapshot":
+				if i+1 >= len(argv) {
+					return usageErr("backup restore --snapshot needs a value")
+				}
+				i++
+				req.Snapshot = argv[i]
+			default:
+				return usageErr("backup restore: unknown arg %q (want --stack NAME [--snapshot ID])", argv[i])
+			}
+		}
+		if req.Stack == "" {
+			return usageErr("backup restore needs --stack NAME")
+		}
+		var resp api.BackupResult
+		if err := c.postJSON("/backup/restore", jsonBytes(req), &resp); err != nil {
+			return err
+		}
+		if opts.json {
+			return writeJSON(stdout, &resp)
+		}
+		_, _ = fmt.Fprintf(stdout, "restored %s stack=%q healthy=%v — %s\n", resp.Snapshot, resp.Stack, resp.Healthy, resp.Detail)
+		return nil
+	case "forget":
+		if len(argv) > 1 {
+			return usageErr("backup forget takes no args")
+		}
+		var resp api.BackupResult
+		if err := c.postJSON("/backup/forget", nil, &resp); err != nil {
+			return err
+		}
+		if opts.json {
+			return writeJSON(stdout, &resp)
+		}
+		_, _ = fmt.Fprintf(stdout, "forget: %s\n", resp.Detail)
+		return nil
+	default:
+		return usageErr("backup: unknown subcommand %q (run | restore | forget)", argv[0])
 	}
 }
 

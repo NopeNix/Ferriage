@@ -265,6 +265,59 @@ type UpdatePolicyResponse struct {
 	Stateful bool   `json:"stateful"`
 }
 
+// BackupSnapshot is one restic snapshot in the repo (ADR 0011).
+type BackupSnapshot struct {
+	ID      string   `json:"id"`
+	ShortID string   `json:"short_id,omitempty"`
+	Time    string   `json:"time"`
+	Tags    []string `json:"tags,omitempty"`
+	Paths   []string `json:"paths,omitempty"`
+	Size    int64    `json:"size,omitempty"`
+}
+
+// BackupStatus is the repo status part of GET /backup. Password
+// is never exposed — only whether one is configured (ADR 0007
+// discipline: the repo password is env/file-only on the peer).
+type BackupStatus struct {
+	Repo         string `json:"repo"`
+	Initialized  bool   `json:"initialized"`
+	Snapshots    int    `json:"snapshots"`
+	PasswordSet  bool   `json:"password_set"`
+	Restic       string `json:"restic,omitempty"`
+	LastBackupAt string `json:"last_backup_at,omitempty"`
+	LastBackupOK bool   `json:"last_backup_ok,omitempty"`
+	LastError    string `json:"last_error,omitempty"`
+}
+
+// BackupList is the body of GET /backup (newest first).
+type BackupList struct {
+	Status    BackupStatus     `json:"status"`
+	Snapshots []BackupSnapshot `json:"snapshots"`
+}
+
+// BackupRunRequest is the body of POST /backup/run: empty stack
+// backs up the whole node, a name backs up that one stack.
+type BackupRunRequest struct {
+	Stack string `json:"stack,omitempty"`
+}
+
+// BackupRestoreRequest is the body of POST /backup/restore:
+// empty snapshot restores the latest of that stack.
+type BackupRestoreRequest struct {
+	Stack    string `json:"stack"`
+	Snapshot string `json:"snapshot,omitempty"`
+}
+
+// BackupResult is one run/restore/forget outcome.
+type BackupResult struct {
+	Scope    string `json:"scope"`
+	Stack    string `json:"stack,omitempty"`
+	Snapshot string `json:"snapshot,omitempty"`
+	Healthy  bool   `json:"healthy,omitempty"`
+	Detail   string `json:"detail,omitempty"`
+	Pruned   int    `json:"pruned,omitempty"`
+}
+
 // MCPRequest is one JSON-RPC 2.0 request to POST /mcp
 // (ADR 0010). It is modelled as a typed struct for the
 // OpenAPI contract, but the live wire is MCP JSON-RPC: the

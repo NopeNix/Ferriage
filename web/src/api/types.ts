@@ -113,6 +113,49 @@ export interface Audit {
   entries: AuditEntry[];
 }
 
+export interface BackupStatus {
+  repo: string;
+  initialized: boolean;
+  snapshots: number;
+  password_set: boolean;
+  restic?: string;
+  last_backup_at?: string;
+  last_backup_ok?: boolean;
+  last_error?: string;
+}
+
+export interface BackupSnapshot {
+  id: string;
+  short_id?: string;
+  time: string;
+  tags?: string[];
+  paths?: string[];
+  size?: number;
+}
+
+export interface BackupList {
+  status: BackupStatus;
+  snapshots: BackupSnapshot[];
+}
+
+export interface BackupRestoreRequest {
+  stack: string;
+  snapshot?: string;
+}
+
+export interface BackupResult {
+  scope: string;
+  stack?: string;
+  snapshot?: string;
+  healthy?: boolean;
+  detail?: string;
+  pruned?: number;
+}
+
+export interface BackupRunRequest {
+  stack?: string;
+}
+
 export interface ComposeFile {
   name: string;
   file: string;

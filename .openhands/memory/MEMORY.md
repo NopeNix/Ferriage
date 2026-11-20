@@ -24,3 +24,4 @@
 | 2026-11-20 | [016-phase3-audit](log/2026-11-20-016-phase3-audit.md) | phase3 | ADR 0008: audit JSONL in .ferriage/, middleware-recorded mutating actions, actor via X-Ferriage-Actor (BFF strips+re-sets); full routine 46/0 |
 | 2026-11-20 | [017-phase3-auto-update](log/2026-11-20-017-phase3-auto-update.md) | phase3 | ADR 0009: per-node digest-poll loop, poll/auto, stateful→poll, snapshot-first, Shoutrrr events; RepoDigests vs ID compare trap; stale go-run peer on :18082; full routine 46/0 |
 | 2026-11-20 | [018-phase3-mcp](log/2026-11-20-018-phase3-mcp.md) | phase3 | ADR 0010: hand-rolled MCP Streamable HTTP at POST /mcp (stateless), 15 tools dispatch in-process through peer mux; audit inner call not envelope (audit.Record); full routine 53/0 |
+| 2026-11-20 | [019-phase3-restic](log/2026-11-20-019-phase3-restic.md) | phase3 | ADR 0011: restic CLI-in-peer; snapshots --json summary is object (RawMessage); restore nests under staged tmpdir name; full routine 60/0 |

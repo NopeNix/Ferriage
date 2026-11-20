@@ -33,3 +33,4 @@ date: YYYY-MM-DD
 | 0008 | [Audit log (Phase 3 item 5)](0008-audit-log.md) | accepted | append-only JSONL in .ferriage/, middleware-recorded mutating actions, actor via X-Ferriage-Actor from BFF, GET /audit read-only |
 | 0009 | [Auto-update (Phase 3 item 6)](0009-auto-update.md) | accepted | per-node digest-poll loop, poll/auto per stack, stateful→poll default, snapshot-before-update, Shoutrrr events |
 | 0010 | [MCP server (Phase 3 item 7)](0010-mcp-server.md) | accepted | hand-rolled MCP Streamable HTTP at POST /mcp (stateless), tools dispatch in-process through the peer mux, BFF OIDC gate |
+| 0011 | [Restic backup (Phase 3 item 8)](0011-restic-backup.md) | accepted | restic CLI-in-peer (docker compose precedent), repo in .ferriage/restic-repo, password env-only, incremental per-stack + node, retention, health-gated restore |

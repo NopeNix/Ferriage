@@ -75,6 +75,9 @@ const (
 	EventUpdateOK           Event = "update.ok"
 	EventUpdateFailed       Event = "update.failed"
 	EventUpdateSnapshotFail Event = "update.snapshot_failed"
+	// Backup events (ADR 0011).
+	EventBackupOK     Event = "backup.ok"
+	EventBackupFailed Event = "backup.failed"
 )
 
 // message is one notification: an event, its subject (stack or

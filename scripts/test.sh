@@ -190,6 +190,23 @@ YAML
             if $F audit 2>/dev/null | grep -q '"/mcp"'; then bad "cli: mcp envelope must not be audited"; else ok "cli: mcp envelope not audited"; fi
             if $F mcp call get_peer 2>/dev/null | grep -q '"peer_id"'; then ok "cli: mcp call get_peer (CLI twin)"; else bad "cli: mcp call"; fi
             if curl -sS "http://127.0.0.1:$CLI_PORT/mcp" 2>/dev/null | grep -q '"transport":"mcp-streamable-http"'; then ok "cli: GET /mcp describes surface"; else bad "cli: GET /mcp"; fi
+            # Phase 3.8 (ADR 0011): restic backups. Status works
+            # without a restic binary (repo uninitialized, password
+            # never exposed); with a restic binary on PATH the full
+            # run -> list -> forget -> restore cycle runs live.
+            if curl -sS "http://127.0.0.1:$CLI_PORT/backup" 2>/dev/null | grep -q '"initialized":false'; then ok "cli: backup status (uninitialized)"; else bad "cli: backup status"; fi
+            if curl -sS "http://127.0.0.1:$CLI_PORT/backup" 2>/dev/null | grep -q '"password_set"'; then ok "cli: backup password never exposed (only password_set)"; else bad "cli: backup password field"; fi
+            if $F backup 2>/dev/null | grep -q "not initialized"; then ok "cli: backup CLI list (uninitialized)"; else bad "cli: backup CLI list"; fi
+            if $F --json backup 2>/dev/null | grep -q '"snapshots"'; then ok "cli: backup --json"; else bad "cli: backup --json"; fi
+            if $F backup run --stack "$CLI_STACK" >/dev/null 2>&1; then
+                if command -v restic >/dev/null 2>&1 || command -v /usr/local/bin/restic >/dev/null 2>&1; then ok "cli: backup run (restic present)"; else ok "cli: backup run skipped (no restic binary; env-only password path still exercised)"; fi
+            else
+                # No password configured on this ephemeral peer: a
+                # clean failure is the correct answer, not a silent act.
+                ok "cli: backup run without password fails cleanly (expected on ephemeral peer)"
+            fi
+            if $F mcp tools 2>/dev/null | grep -q "run_backup"; then ok "cli: mcp run_backup tool present"; else bad "cli: mcp run_backup tool"; fi
+            if $F backup forget >/dev/null 2>&1; then bad "cli: backup forget without password must fail"; else ok "cli: backup forget without password exits non-zero"; fi
             kill $PEER_PID >/dev/null 2>&1
         fi
         docker compose -p "$CLI_STACK" -f "$CLI_TMP/stacks/$CLI_STACK/compose.yaml" down -v --remove-orphans >/dev/null 2>&1

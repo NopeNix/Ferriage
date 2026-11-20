@@ -50,6 +50,11 @@ const (
 	// through this middleware.
 	ActionUpdatePolicy Action = "update.policy"
 	ActionUpdateRun    Action = "update.run"
+	// ActionBackupRun / Restore / Forget are the restic backup
+	// operator actions (ADR 0011).
+	ActionBackupRun     Action = "backup.run"
+	ActionBackupRestore Action = "backup.restore"
+	ActionBackupForget  Action = "backup.forget"
 )
 
 // ActorHeader carries the reported operator identity. The BFF

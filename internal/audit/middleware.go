@@ -121,6 +121,12 @@ func classify(r *http.Request) (Action, string, bool) {
 		return ActionOnboard, "onboard", true
 	case p == "/notify/test":
 		return ActionNotifyTest, "", true
+	case p == "/backup/run":
+		return ActionBackupRun, "backup", true
+	case p == "/backup/restore":
+		return ActionBackupRestore, "backup", true
+	case p == "/backup/forget":
+		return ActionBackupForget, "backup", true
 	case strings.HasPrefix(p, "/update/"):
 		// /update/{name}/policy | /update/{name}/run (ADR 0009).
 		// /update/{name}/check is a probe, not an action: it is

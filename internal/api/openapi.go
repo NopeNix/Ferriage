@@ -31,6 +31,10 @@
 //	POST /mcp                        MCP Streamable HTTP (ADR 0010)
 //	GET/DELETE /mcp                  MCP surface description / stateless close
 //	GET  /sync/manifest, /sync/blob  state-sync wire (ADR 0001)
+//	GET  /backup                     restic repo status + history (ADR 0011)
+//	POST /backup/run                 backup now (one stack or node)
+//	POST /backup/restore             restore + health-gated deploy
+//	POST /backup/forget              retention pruning
 package api
 
 import (
@@ -563,6 +567,94 @@ const Document = `{
           "202": { "description": "Accepted" }
         }
       }
+    },
+    "/backup": {
+      "get": {
+        "operationId": "getBackup",
+        "summary": "Restic repo status + snapshot history (ADR 0011); password never exposed, only password_set",
+        "responses": {
+          "200": {
+            "description": "Repo status and snapshots, newest first",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/BackupList" }
+              }
+            }
+          },
+          "502": { "$ref": "#/components/responses/UpstreamError" }
+        }
+      }
+    },
+    "/backup/run": {
+      "post": {
+        "operationId": "runBackup",
+        "summary": "Back up now: one stack (by name) or the whole node (empty stack)",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/BackupRunRequest" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Backup outcome",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/BackupResult" }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "502": { "$ref": "#/components/responses/UpstreamError" }
+        }
+      }
+    },
+    "/backup/restore": {
+      "post": {
+        "operationId": "restoreBackup",
+        "summary": "Restore a snapshot (empty id = latest of that stack) and deploy health-gated",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/BackupRestoreRequest" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Restore outcome (healthy = deploy gate passed)",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/BackupResult" }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "502": { "$ref": "#/components/responses/UpstreamError" }
+        }
+      }
+    },
+    "/backup/forget": {
+      "post": {
+        "operationId": "forgetBackups",
+        "summary": "Apply retention pruning (keep last N, default 7)",
+        "responses": {
+          "200": {
+            "description": "Prune outcome",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/BackupResult" }
+              }
+            }
+          },
+          "502": { "$ref": "#/components/responses/UpstreamError" }
+        }
+      }
     }
   },
   "components": {
@@ -948,6 +1040,66 @@ const Document = `{
           "stateless": { "type": "boolean" },
           "tools": { "type": "array", "items": { "type": "string" } },
           "doc": { "type": "string" }
+        }
+      },
+      "BackupSnapshot": {
+        "type": "object",
+        "required": ["id", "time"],
+        "properties": {
+          "id": { "type": "string" },
+          "short_id": { "type": "string" },
+          "time": { "type": "string" },
+          "tags": { "type": "array", "items": { "type": "string" } },
+          "paths": { "type": "array", "items": { "type": "string" } },
+          "size": { "type": "integer" }
+        }
+      },
+      "BackupStatus": {
+        "type": "object",
+        "required": ["repo", "initialized", "snapshots", "password_set"],
+        "properties": {
+          "repo": { "type": "string" },
+          "initialized": { "type": "boolean" },
+          "snapshots": { "type": "integer" },
+          "password_set": { "type": "boolean" },
+          "restic": { "type": "string" },
+          "last_backup_at": { "type": "string" },
+          "last_backup_ok": { "type": "boolean" },
+          "last_error": { "type": "string" }
+        }
+      },
+      "BackupList": {
+        "type": "object",
+        "required": ["status", "snapshots"],
+        "properties": {
+          "status": { "$ref": "#/components/schemas/BackupStatus" },
+          "snapshots": { "type": "array", "items": { "$ref": "#/components/schemas/BackupSnapshot" } }
+        }
+      },
+      "BackupRunRequest": {
+        "type": "object",
+        "properties": {
+          "stack": { "type": "string" }
+        }
+      },
+      "BackupRestoreRequest": {
+        "type": "object",
+        "required": ["stack"],
+        "properties": {
+          "stack": { "type": "string" },
+          "snapshot": { "type": "string" }
+        }
+      },
+      "BackupResult": {
+        "type": "object",
+        "required": ["scope"],
+        "properties": {
+          "scope": { "type": "string" },
+          "stack": { "type": "string" },
+          "snapshot": { "type": "string" },
+          "healthy": { "type": "boolean" },
+          "detail": { "type": "string" },
+          "pruned": { "type": "integer" }
         }
       },
       "SyncEntry": {

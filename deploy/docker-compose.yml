@@ -35,6 +35,12 @@ services:
       # tokens, SMTP creds) — they arrive only via env and never
       # cross the peer API, so keep them out of committed files.
       FERRIAGE_NOTIFY_URLS: ${FERRIAGE_NOTIFY_URLS:-}
+      # Restic repo password (ADR 0011), env or file-mounted.
+      # Empty = backups disabled (status still answers). Secrets:
+      # env only, never the API.
+      FERRIAGE_RESTIC_PASSWORD: ${FERRIAGE_RESTIC_PASSWORD:-}
+      FERRIAGE_RESTIC_PASSWORD_FILE: ${FERRIAGE_RESTIC_PASSWORD_FILE:-}
+      FERRIAGE_BACKUP_KEEP: ${FERRIAGE_BACKUP_KEEP:-7}
     volumes:
       # State lives on disk, never in a database (AGENTS.md §3).
       - ferriage_state:/stacks

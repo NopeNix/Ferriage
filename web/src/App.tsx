@@ -8,6 +8,7 @@ import { OnboardHost } from "./components/OnboardHost";
 import { NotifyStatus } from "./components/NotifyStatus";
 import { AuditLog } from "./components/AuditLog";
 import { UpdateStatus } from "./components/UpdateStatus";
+import { BackupStatus } from "./components/BackupStatus";
 import { Badge } from "./components/ui/badge";
 import { Button } from "./components/ui/button";
 
@@ -103,6 +104,9 @@ export default function App() {
                 </div>
                 <div className="mb-8">
                   <UpdateStatus />
+                </div>
+                <div className="mb-8">
+                  <BackupStatus />
                 </div>
                 <div className="mb-8">
                   <AuditLog />

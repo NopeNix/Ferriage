@@ -15,6 +15,7 @@ import (
 
 	"github.com/NopeNix/Ferriage/internal/api"
 	"github.com/NopeNix/Ferriage/internal/audit"
+	"github.com/NopeNix/Ferriage/internal/backup"
 	"github.com/NopeNix/Ferriage/internal/compose"
 	"github.com/NopeNix/Ferriage/internal/console"
 	"github.com/NopeNix/Ferriage/internal/deploy"
@@ -99,6 +100,15 @@ func main() {
 	console.Register(mux)
 	onboard.Register(mux, stateDir, selfURL, notifier)
 	notify.Register(mux, notifier)
+	// Restic backups (ADR 0011): repo in .ferriage/restic-repo,
+	// password env/file-only. Repo creation happens on first run;
+	// status works without a restic binary (initialized=false).
+	backup.Register(mux, stateDir, notifier)
+	if os.Getenv("FERRIAGE_RESTIC_PASSWORD") != "" || os.Getenv("FERRIAGE_RESTIC_PASSWORD_FILE") != "" {
+		log.Printf("ferriage backup: restic repo at .ferriage/restic-repo (password configured)")
+	} else {
+		log.Printf("ferriage backup: disabled until FERRIAGE_RESTIC_PASSWORD or FERRIAGE_RESTIC_PASSWORD_FILE is set")
+	}
 	// Audit log (ADR 0008): append-only JSONL under
 	// .ferriage/, recorded by middleware around the whole
 	// mux so actor/status are captured uniformly. Reads and

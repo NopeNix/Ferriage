@@ -80,6 +80,12 @@ func TestSchemasMatchGoStructs(t *testing.T) {
 		{"McpRequest", reflect.TypeOf(MCPRequest{})},
 		{"McpResponse", reflect.TypeOf(MCPResponse{})},
 		{"McpDescription", reflect.TypeOf(McpDescription{})},
+		{"BackupSnapshot", reflect.TypeOf(BackupSnapshot{})},
+		{"BackupStatus", reflect.TypeOf(BackupStatus{})},
+		{"BackupList", reflect.TypeOf(BackupList{})},
+		{"BackupRunRequest", reflect.TypeOf(BackupRunRequest{})},
+		{"BackupRestoreRequest", reflect.TypeOf(BackupRestoreRequest{})},
+		{"BackupResult", reflect.TypeOf(BackupResult{})},
 	}
 	for _, tc := range cases {
 		s, ok := schemas[tc.name]

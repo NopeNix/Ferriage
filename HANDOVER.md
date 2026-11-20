@@ -5,7 +5,7 @@
 > `.openhands/memory/`. Read order: this file → memory index →
 > `AGENTS.md`.
 
-**Updated:** 2026-11-20, session 018
+**Updated:** 2026-11-20, session 019
 **Where the work is:** Phases 0–2 done. Phase 1 (milestone, 1.1–1.6):
 peer+`/healthz`, state dir + adopt by labels, ADR 0001 manifest
 file-sync + identity, ADR 0002 snapshot export/import, health-gated
@@ -51,25 +51,35 @@ proxy behind the OIDC gate, `ferriage mcp [tools|call]`
 CLI twin, `audit.Record` for the inner action (envelope
 never audited); live proof vs dev peer + BFF (initialize,
 list, deploy, exec, audit-as-`mcp`). Full routine 53/0.
+**Phase 3 item 8 done: restic backup/restore** (ADR 0011) —
+restic CLI-in-peer (docker-compose shell-out precedent, not a
+sidecar/binding), `internal/backup`: repo in
+`.ferriage/restic-repo`, password env/file-only (only
+`password_set` exposed), `GET /backup` + run (stack/node) +
+restore (health-gated) + forget (retention 7), CLI `ferriage
+backup`, 4 MCP tools (15→19), `BackupStatus` UI card, Shoutrrr
++ audit events; live proof rc 0.18.1: dedup (`data_blobs:0`),
+down-v + restore → healthy with volume marker, MCP 19.
+**Phase 3 is 8/8 complete.** Full routine 60/0.
 `CONCEPT.md` canonical.
 **Stack:** Go peer, React/shadcn UI (separate container, Monaco
 vendored offline), Iroh mesh (later). GitHub `NopeNix/Ferriage`,
 Docker Hub `nopenix/ferriage`.
-**Still open:** Phase 3 item 8 (restic polish); first image
-tag (Phase 4 ship, user-gated).
-**Next session:** Phase 3 item 8 — restic backup/restore
-polish (incremental, retention, node-level DR). Settle the
-packaging first: restic sidecar vs CLI-in-peer vs Go binding.
+**Still open:** first image tag (Phase 4 ship, user-gated
+per AGENTS.md §6).
+**Next session:** Phase 4 ship — confirm the tag with the
+operator, then tag → `gh release` → push `nopenix/ferriage`.
 **Dev host:** home box (prototyping). **Prod:** VPS + LAN hosts —
 never test mesh/agent changes against them without confirmation.
 Dev ports on this box: peer 18080, BFF 19080, Dex 18081 (8080 is
 Open WebUI). Kill the dev peer before `scripts/test.sh` — a
 surviving peer poisons layer 2 (bind failure cascades, see
 session 018).
-**Live instance:** none (dev stack stopped after session 018).
+**Live instance:** none (dev stack stopped after session 019).
 
 ## Session log
 
+- [019 — phase 3 restic](handover/2026-11-20-019-phase3-restic.md) — ADR 0011: restic CLI-in-peer, incremental per-stack + node backups, retention, health-gated restore, CLI + MCP (19) + UI card; full routine 60/0
 - [018 — phase 3 mcp](handover/2026-11-20-018-phase3-mcp.md) — ADR 0010: hand-rolled MCP Streamable HTTP at POST /mcp, 15 tools via in-process mux dispatch, BFF OIDC gate, inner-action audit; full routine 53/0
 - [017 — phase 3 auto-update](handover/2026-11-20-017-phase3-auto-update.md) — ADR 0009: per-node digest-poll loop, poll/auto, stateful→poll, snapshot-first, Shoutrrr events; GET /update + CLI + UI card; full routine 46/0
 - [016 — phase 3 audit](handover/2026-11-20-016-phase3-audit.md) — ADR 0008: audit JSONL in .ferriage/, middleware-recorded mutating actions, BFF actor header, read-only GET /audit + CLI + UI card; full routine 46/0

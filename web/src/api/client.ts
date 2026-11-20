@@ -1,4 +1,4 @@
-import type { Audit, ComposeFile, DeployResult, Error as ApiError, ExecResult, Logs, NotifyStatus, NotifyTest, OnboardResponse, Peer, SnapshotManifest, Stacks, Stats, UpdateList, UpdatePolicyResponse, UpdateRun, UpdateStatus } from "./types";
+import type { Audit, BackupList, BackupResult, ComposeFile, DeployResult, Error as ApiError, ExecResult, Logs, NotifyStatus, NotifyTest, OnboardResponse, Peer, SnapshotManifest, Stacks, Stats, UpdateList, UpdatePolicyResponse, UpdateRun, UpdateStatus } from "./types";
 
 // The UI talks to the BFF at /api/*, which proxies to the peer.
 // The peer API is typed by the OpenAPI contract served at
@@ -215,6 +215,50 @@ export const api = {
       throw new Error(`/update/${name}/policy: ${res.status} ${body?.error ?? res.statusText}`);
     }
     return (await res.json()) as UpdatePolicyResponse;
+  },
+  // Restic backups (ADR 0011): status (password never exposed),
+  // run (one stack or the whole node), restore, retention pruning.
+  backup: () => request<BackupList>("GET", "/backup"),
+  runBackup: async (stack = ""): Promise<BackupResult> => {
+    const session = await getSession();
+    if (!session) throw new Error(`/backup/run: 401 Unauthorized`);
+    const res = await fetch(`/api/backup/run`, {
+      method: "POST",
+      headers: { "x-csrf-token": session.csrf, "content-type": "application/json" },
+      body: JSON.stringify({ stack: stack || undefined }),
+    });
+    if (!res.ok) {
+      const body = (await res.json().catch(() => null)) as ApiError | null;
+      throw new Error(`/backup/run: ${res.status} ${body?.error ?? res.statusText}`);
+    }
+    return (await res.json()) as BackupResult;
+  },
+  restoreBackup: async (stack: string, snapshot?: string): Promise<BackupResult> => {
+    const session = await getSession();
+    if (!session) throw new Error(`/backup/restore: 401 Unauthorized`);
+    const res = await fetch(`/api/backup/restore`, {
+      method: "POST",
+      headers: { "x-csrf-token": session.csrf, "content-type": "application/json" },
+      body: JSON.stringify({ stack, snapshot: snapshot || undefined }),
+    });
+    if (!res.ok) {
+      const body = (await res.json().catch(() => null)) as ApiError | null;
+      throw new Error(`/backup/restore: ${res.status} ${body?.error ?? res.statusText}`);
+    }
+    return (await res.json()) as BackupResult;
+  },
+  forgetBackups: async (): Promise<BackupResult> => {
+    const session = await getSession();
+    if (!session) throw new Error(`/backup/forget: 401 Unauthorized`);
+    const res = await fetch(`/api/backup/forget`, {
+      method: "POST",
+      headers: { "x-csrf-token": session.csrf },
+    });
+    if (!res.ok) {
+      const body = (await res.json().catch(() => null)) as ApiError | null;
+      throw new Error(`/backup/forget: ${res.status} ${body?.error ?? res.statusText}`);
+    }
+    return (await res.json()) as BackupResult;
   },
   runUpdate: async (name: string): Promise<UpdateRun> => {
     const session = await getSession();

@@ -37,7 +37,8 @@ RUN CGO_ENABLED=0 go build -trimpath \
 FROM alpine:3.20
 
 # docker-cli-compose is the Compose plugin binary (/usr/libexec/docker/cli-plugins).
-RUN apk add --no-cache docker-cli docker-cli-compose ca-certificates curl
+# restic is the backup engine (ADR 0011): the peer shells out to it.
+RUN apk add --no-cache docker-cli docker-cli-compose restic ca-certificates curl
 
 COPY --from=build /ferriage-peer /usr/local/bin/ferriage-peer
 COPY --from=build /ferriage /usr/local/bin/ferriage

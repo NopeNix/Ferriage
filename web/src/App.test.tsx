@@ -36,6 +36,9 @@ function mockFetch(impl: (url: string) => unknown) {
       if (u.includes("/update")) {
         return { ok: true, status: 200, statusText: "OK", json: async () => ({ stacks: [] }) };
       }
+      if (u.includes("/backup")) {
+        return { ok: true, status: 200, statusText: "OK", json: async () => ({ status: { repo: "/stacks/.ferriage/restic-repo", initialized: false, snapshots: 0, password_set: false }, snapshots: [] }) };
+      }
       return { ok: true, status: 200, statusText: "OK", json: async () => impl(u) };
     }),
   );
