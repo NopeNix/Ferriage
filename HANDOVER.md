@@ -5,12 +5,13 @@
 > `.openhands/memory/`. Read order: this file → memory index →
 > `AGENTS.md`.
 
-**Updated:** 2026-11-20, session 007
+**Updated:** 2026-11-20, session 008
 **Where the work is:** Phase 0 closed. Phase 1.1–1.4 done: peer+
 `/healthz`, state dir + adopt by labels, ADR 0001 manifest file-sync +
 identity, and **ADR 0002 snapshot export/import (stack + volumes →
-one gzip+tar, helper-container exec capture; round-trip proven live
-with volume data intact)**: `POST /stacks/{name}/export|import`.
+one gzip+tar; volume data via daemon copy APIs through a sleeper
+container; live round-trip proved: export → `down -v` → import →
+`up` → data intact)**: `POST /stacks/{name}/export|import`.
 `scripts/test.sh --fast`: 4/0. `CONCEPT.md` canonical.
 **Stack:** Go peer, React/shadcn UI (separate container), Iroh mesh.
 GitHub `NopeNix/Ferriage`, Docker Hub `nopenix/ferriage`.
@@ -24,7 +25,8 @@ never test mesh/agent changes against them without confirmation.
 
 ## Session log
 
-- [007 — phase 1.4 snapshot](handover/2026-11-20-007-phase1-4-snapshot.md) — ADR 0002 snapshot export/import; helper-container exec capture; two Docker-attach stdin gotchas
+- [008 — phase 1.4 finish](handover/2026-11-20-008-phase1-4-finish.md) — finished 007's uncommitted work; attach-stdin data loss fixed via daemon copy APIs; live round-trip + commit
+- [007 — phase 1.4 snapshot](handover/2026-11-20-007-phase1-4-snapshot.md) — ADR 0002 snapshot export/import; two Docker-attach stdin gotchas
 - [006 — phase 1.3 sync](handover/2026-11-20-006-phase1-3-sync.md) — ADR 0001 manifest file-sync + identity + tombstone ledger; two-peer live proof
 - [005 — phase 1.2 adopt](handover/2026-11-20-005-phase1-2-adopt.md) — state dir + adopt by labels + GET /stacks proved live; docker deps pinned to Go 1.25
 - [004 — phase 1.1 scaffold](handover/2026-11-20-004-phase1-scaffold.md) — Phase 0 re-verified and closed; peer binary + /healthz green, Go installed user-local

@@ -51,15 +51,22 @@ volumes/<name>/        # content of each named volume, by volume name
   itself); restore verifies every entry's path is clean and safely
   contained (same `ValidatePath` discipline as ADR 0001) — a hostile
   archive can never escape the destination dirs.
-- **Volumes are captured from daemon-reported mountpoints.** The peer
-  runs on the same host as the Docker daemon it manages (that's the
-  deployment shape: peer container mounts the socket and
-  `/var/lib/docker`), so `VolumeInspect` + a local walk is the whole
-  capture path — no helper containers, no image pulls, no shelling
-  out. Limitation: a peer pointed at a *remote* Docker host
-  (`DOCKER_HOST` over TCP) can't read mountpoints; that needs a
-  helper-container capture fallback, which is Phase 3 polish, not a
-  format change.
+- **Volumes are captured via the daemon's copy APIs**
+  (`CopyFromContainer` / `CopyToContainer`) through a throwaway
+  `alpine` helper container with the volume bound at `/vol` — the
+  daemon tars the mountpoint itself, so no mountpoint paths leak into
+  the peer and no host filesystem access to `/var/lib/docker` is
+  needed, and a peer pointed at a *remote* Docker host
+  (`DOCKER_HOST` over TCP) works too.
+  **Volume data never travels the helper's attach stream:** the
+  first cut piped the tar through attach stdin (`tar -xvf -`) and
+  was wrong on this stack — attach stdin of a not-yet-started
+  container silently delivers zero bytes (verified live), so
+  restores failed "short read" and even plain `cat` received
+  nothing. The helper survives only as a `sleep` anchor whose
+  volume is the copy target. Copy entries arrive rooted at the
+  copied dir's base name (`vol/...`); they are rebased to
+  volume-relative paths.
 - **Restore creates volumes fresh**: volumes are recreated as
   `<stack>_<name>` (compose's default project prefix), and their
   contents are written into the new mountpoints. If the destination
@@ -72,13 +79,14 @@ volumes/<name>/        # content of each named volume, by volume name
 
 ## Consequences
 
-- Phase 1.4 is one Go package (`internal/snapshot`) + two endpoints.
-  Total new dependency surface: zero.
-- Restic is **not** abandoned — it remains the Phase 3 choice for
-  incremental/dedup backups. A future v2 format can add restic-repo
-  export as an *additional* payload; v1 readers stay valid.
-- gzip (stdlib) rather than zstd (busybox tar has no zstd flag, and
-  Go's stdlib has no zstd): slightly larger snapshots, zero deps.
-  Revisit if snapshots get big.
-- Symlinks inside volume data are not followed (only regular files
-  and dirs are captured) — same discipline as ADR 0001's sync walk.
+- Phase 1.4 ships as one Go package (`internal/snapshot`) + two
+  endpoints (`POST /stacks/{name}/export|import`), zero new
+  dependency surface. Round-trip proved live on the dev host
+  (export → `down -v` → import → `up` → volume data intact).
+- Restic stays the Phase 3 candidate for incremental/dedup backups.
+  A future format version can add restic as an *additional* payload.
+- gzip (stdlib), not zstd (Go's stdlib has no zstd): slightly
+  larger snapshots, zero deps. Revisit if snapshots get big.
+- Symlinks inside volume data are dropped on capture (daemon tar
+  resolves them); restore materializes regular files — same
+  discipline as ADR 0001's sync walk.

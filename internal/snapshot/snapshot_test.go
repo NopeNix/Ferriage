@@ -68,14 +68,6 @@ func (f *fakeBackend) VolumeRemove(ctx context.Context, id string, force bool) e
 	return nil
 }
 
-// RunHelper is the live-daemon exec helper; the fake backend's
-// volume data goes through the copy operations below, which is how
-// Export/Restore exercise them. RunHelper itself is unused by
-// Export/Restore now.
-func (f *fakeBackend) RunHelper(ctx context.Context, image string, argv []string, volumeName string, stdout io.Writer) (int, error) {
-	return 0, nil
-}
-
 // VolumeCopyOut tars the volume dir (mountpoint) to w, GNU-tar on the
 // host, mirroring the daemon's CopyFromContainer.
 func (f *fakeBackend) VolumeCopyOut(ctx context.Context, volumeName string, w io.Writer) error {

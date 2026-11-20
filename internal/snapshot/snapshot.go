@@ -62,13 +62,6 @@ type Backend interface {
 	VolumeInspect(ctx context.Context, volumeID string) (volume.Volume, error)
 	VolumeCreate(ctx context.Context, options volume.CreateOptions) (volume.Volume, error)
 	VolumeRemove(ctx context.Context, volumeID string, force bool) error
-	// RunHelper runs a one-shot helper container (image, argv, bind of
-	// the volume at /vol, stdout drained). Returns the process exit
-	// code. Volume data travels through the copy operations, never
-	// through the container's attach stream: attach stdin on this
-	// stack reaches `cat` as zero bytes (verified live), so a tar
-	// piped that way arrives truncated.
-	RunHelper(ctx context.Context, image string, argv []string, volumeName string, stdout io.Writer) (int, error)
 	// VolumeCopyOut copies the contents of volumeName's mountpoint to
 	// w as a tar archive; VolumeCopyIn extracts the tar read from r
 	// into the volume. Both are the daemon's first-class copy APIs,

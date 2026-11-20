@@ -12,7 +12,6 @@ import (
 	"github.com/docker/docker/api/types/image"
 	"github.com/docker/docker/api/types/volume"
 	"github.com/docker/docker/client"
-	"github.com/docker/docker/pkg/stdcopy"
 )
 
 func pullOptions() image.PullOptions { return image.PullOptions{} }
@@ -44,20 +43,6 @@ func (d *dockerBackend) VolumeCreate(ctx context.Context, options volume.CreateO
 
 func (d *dockerBackend) VolumeRemove(ctx context.Context, volumeID string, force bool) error {
 	return d.cli.VolumeRemove(ctx, volumeID, force)
-}
-
-// RunHelper runs a one-shot helper container with the volume bound at
-// /vol, draining stdout. Returns the exit code; the helper's stderr
-// is embedded in the error on failure.
-func (d *dockerBackend) RunHelper(ctx context.Context, image string, argv []string, volumeName string, stdout io.Writer) (int, error) {
-	code, stderr, err := d.run(ctx, image, argv, volumeName, nil, stdout)
-	if err != nil {
-		return 1, err
-	}
-	if code != 0 {
-		return code, fmt.Errorf("helper exited %d: %s", code, stderr)
-	}
-	return code, nil
 }
 
 // VolumeCopyOut copies the contents of the volume's mountpoint to w
@@ -118,11 +103,13 @@ func (d *dockerBackend) sleepingContainer(ctx context.Context, image, volumeName
 	return id, nil
 }
 
-// copyTarRebase re-emits a tar whose entries are rooted at "."
-// (CopyFromContainer of a directory) with volume-relative paths.
+// copyTarRebase re-emits a tar whose entries are rooted at the
+// copied directory's base name (CopyFromContainer of /vol yields
+// "vol/...") with volume-relative paths.
 func copyTarRebase(r io.Reader, w io.Writer) error {
 	tr := tar.NewReader(r)
 	tw := tar.NewWriter(w)
+	root := ""
 	for {
 		hdr, err := tr.Next()
 		if err == io.EOF {
@@ -132,9 +119,18 @@ func copyTarRebase(r io.Reader, w io.Writer) error {
 			_ = tw.Close()
 			return fmt.Errorf("read volume archive: %w", err)
 		}
-		name := strings.TrimPrefix(filepath.ToSlash(hdr.Name), "./")
+		slashName := filepath.ToSlash(hdr.Name)
+		name := strings.TrimPrefix(slashName, "./")
 		if name == "" || name == "." {
 			continue
+		}
+		if root == "" {
+			if i := strings.Index(name, "/"); i >= 0 {
+				root = name[:i]
+			}
+		}
+		if root != "" && strings.HasPrefix(name, root+"/") {
+			name = strings.TrimPrefix(name, root+"/")
 		}
 		nh := *hdr
 		nh.Name = name
@@ -151,83 +147,3 @@ func copyTarRebase(r io.Reader, w io.Writer) error {
 	}
 	return tw.Close()
 }
-
-func (d *dockerBackend) run(ctx context.Context, image string, argv []string, volumeName string, stdin io.Reader, stdout io.Writer) (int, string, error) {
-	// Pull the helper image if missing (alpine is tiny; when the
-	// stack already runs it, this is a no-op).
-	if _, err := d.cli.ImageInspect(ctx, image); err != nil {
-		rc, err := d.cli.ImagePull(ctx, image, pullOptions())
-		if err != nil {
-			return 1, "", fmt.Errorf("pull %s: %w", image, err)
-		}
-		_, _ = io.Copy(io.Discard, rc)
-		_ = rc.Close()
-	}
-	// The container just sleeps with the volume mounted; the actual
-	// helper command runs as an exec session so stdin/stdout work on
-	// a live container (attach-stdin of a not-yet-started container
-	// silently drops client stdin).
-	cfg := &container.Config{
-		Image: image,
-		Cmd:   []string{"sleep", "infinity"},
-	}
-	host := &container.HostConfig{
-		Binds:      []string{volumeName + ":/vol"},
-		AutoRemove: true,
-	}
-	created, err := d.cli.ContainerCreate(ctx, cfg, host, nil, nil, "")
-	if err != nil {
-		return 1, "", fmt.Errorf("create helper container: %w", err)
-	}
-	id := created.ID
-	defer func() { _ = d.cli.ContainerRemove(ctx, id, container.RemoveOptions{Force: true}) }()
-	if err := d.cli.ContainerStart(ctx, id, container.StartOptions{}); err != nil {
-		return 1, "", fmt.Errorf("start helper container: %w", err)
-	}
-	execCfg := container.ExecOptions{
-		Cmd:          argv,
-		AttachStdin:  stdin != nil,
-		AttachStdout: true,
-		AttachStderr: true,
-	}
-	execResp, err := d.cli.ContainerExecCreate(ctx, id, execCfg)
-	if err != nil {
-		return 1, "", fmt.Errorf("exec create: %w", err)
-	}
-	execID := execResp.ID
-	attach, err := d.cli.ContainerExecAttach(ctx, execID, container.ExecAttachOptions{
-		Detach: false,
-	})
-	if err != nil {
-		return 1, "", fmt.Errorf("exec attach: %w", err)
-	}
-	defer attach.Close()
-	if err := d.cli.ContainerExecStart(ctx, execID, container.ExecStartOptions{}); err != nil {
-		return 1, "", fmt.Errorf("exec start: %w", err)
-	}
-	if stdin != nil {
-		// Exec-attach stdin is raw (not multiplexed-framed);
-		// stdout/stderr still come back framed.
-		go func() {
-			_, _ = io.Copy(attach.Conn, stdin)
-			_ = attach.CloseWrite()
-		}()
-	}
-	// Docker multiplexes stdout/stderr into framed streams;
-	// demultiplex so stdout carries only the archive.
-	var errBuf appendWriter
-	if stdout != nil {
-		_, _ = stdcopy.StdCopy(stdout, &errBuf, attach.Reader)
-	}
-	inspect, err := d.cli.ContainerExecInspect(ctx, execID)
-	if err != nil {
-		return 1, errBuf.String(), fmt.Errorf("exec inspect: %w", err)
-	}
-	return inspect.ExitCode, errBuf.String(), nil
-}
-
-// appendWriter collects helper stderr for error messages.
-type appendWriter struct{ b []byte }
-
-func (w *appendWriter) Write(p []byte) (int, error) { w.b = append(w.b, p...); return len(p), nil }
-func (w *appendWriter) String() string              { return string(w.b) }
