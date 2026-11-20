@@ -28,6 +28,11 @@ RUN CGO_ENABLED=0 go build -trimpath \
         -X github.com/NopeNix/Ferriage/internal/version.Version=${FERRIAGE_VERSION:-dev} \
         -X github.com/NopeNix/Ferriage/internal/version.Commit=${FERRIAGE_COMMIT:-unknown}" \
       -o /ferriage-peer ./cmd/peer
+RUN CGO_ENABLED=0 go build -trimpath \
+      -ldflags="-s -w \
+        -X github.com/NopeNix/Ferriage/internal/version.Version=${FERRIAGE_VERSION:-dev} \
+        -X github.com/NopeNix/Ferriage/internal/version.Commit=${FERRIAGE_COMMIT:-unknown}" \
+      -o /ferriage ./cmd/ferriage
 
 FROM alpine:3.20
 
@@ -35,6 +40,7 @@ FROM alpine:3.20
 RUN apk add --no-cache docker-cli docker-cli-compose ca-certificates curl
 
 COPY --from=build /ferriage-peer /usr/local/bin/ferriage-peer
+COPY --from=build /ferriage /usr/local/bin/ferriage
 
 # /stacks is the state dir (Compose files = source of truth, CONCEPT § hard 6).
 # The socket must be bind-mounted at runtime; the peer talks to the

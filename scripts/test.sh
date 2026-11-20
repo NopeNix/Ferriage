@@ -81,6 +81,83 @@ else
     skip "no web/package.json yet — frontend layer skipped (no UI)"
 fi
 
+# ---- Layer 1.5: CLI end-to-end (cmd/ferriage vs an ephemeral peer) ---
+# One peer on a scratch state dir + a scratch test stack (health
+# checked, volume-writing, unique name per run). The CLI drives the
+# same typed API the UI uses: lists, deploys, exports, imports,
+# and a --json round-trip. This is the user-facing twin check:
+# every UI action has a CLI twin (Phase 3), proved end-to-end here.
+if [ "$SKIP_CONTAINER" -eq 0 ] && [ -f go.mod ] && [ -d cmd/ferriage ]; then
+    log "Layer 1.5: CLI end-to-end (cmd/ferriage vs ephemeral peer)"
+    if ! command -v docker >/dev/null 2>&1; then
+        skip "docker not installed — CLI e2e skipped"
+    else
+        set +e
+        CLI_TMP="$(mktemp -d /tmp/ferriage-cli.XXXXXX)"
+        CLI_PORT=18090
+        CLI_STACK="ferriage-cli-$(head -c4 /dev/urandom | od -An -tx1 | tr -d ' \n')"
+        CLI_VOL="${CLI_STACK}_data"
+        CLI_MARKER="cli-volume-$(head -c4 /dev/urandom | od -An -tx1 | tr -d ' \n')"
+        # Build both binaries once.
+        go build -o "$CLI_TMP/peer-bin" ./cmd/peer 2>"$CLI_TMP/build.log" && go build -o "$CLI_TMP/ferriage" ./cmd/ferriage 2>>"$CLI_TMP/build.log"
+        if [ $? -ne 0 ]; then
+            bad "cli: binary build (see $CLI_TMP/build.log)"
+        else
+            mkdir -p "$CLI_TMP/stacks/$CLI_STACK"
+            cat >"$CLI_TMP/stacks/$CLI_STACK/compose.yaml" <<YAML
+services:
+  app:
+    image: alpine:3.20
+    command: ["sh", "-c", "mkdir -p /data && echo $CLI_MARKER > /data/marker.txt && sleep 1000"]
+    volumes:
+      - data:/data
+    healthcheck:
+      test: ["CMD", "sh", "-c", "test -f /data/marker.txt"]
+      interval: 2s
+      timeout: 3s
+      retries: 5
+      start_period: 2s
+volumes:
+  data:
+YAML
+            FERRIAGE_ADDR=":$CLI_PORT" FERRIAGE_STATE_DIR="$CLI_TMP/stacks" "$CLI_TMP/peer-bin" >"$CLI_TMP/peer.log" 2>&1 &
+            PEER_PID=$!
+            for i in $(seq 1 30); do curl -fsS "http://127.0.0.1:$CLI_PORT/healthz" >/dev/null 2>&1 && break; sleep 0.5; done
+
+            # The web types must match this peer's contract exactly.
+            if (cd web && FERRIAGE_PEER_URL="http://127.0.0.1:$CLI_PORT" npm run gen:check --silent >/dev/null 2>&1); then ok "cli: web types match /openapi.json (gen:check)"; else bad "cli: web types drifted from /openapi.json (npm run gen:check in web/)"; fi
+
+            F="$CLI_TMP/ferriage --peer http://127.0.0.1:$CLI_PORT"
+            if $F peer 2>/dev/null | grep -q "^peer "; then ok "cli: peer identity"; else bad "cli: peer identity"; fi
+            if $F --json peer 2>/dev/null | grep -q '"peer_id"'; then ok "cli: peer --json"; else bad "cli: peer --json"; fi
+            if $F deploy "$CLI_STACK" 2>/dev/null | grep -q "healthy"; then ok "cli: deploy (health-gated)"; else bad "cli: deploy"; fi
+            if $F --json stacks 2>/dev/null | grep -q "\"name\": \"$CLI_STACK\""; then ok "cli: stacks --json lists adopted stack"; else bad "cli: stacks --json"; fi
+            if $F export "$CLI_STACK" -o "$CLI_TMP/snap.tar.gz" >/dev/null 2>&1 && [ -s "$CLI_TMP/snap.tar.gz" ]; then ok "cli: export snapshot"; else bad "cli: export snapshot"; fi
+            # The move needs the live stack gone first: bring it down
+            # fully (containers + volume), then import the snapshot
+            # through the CLI into a fresh stack name.
+            docker compose -p "$CLI_STACK" -f "$CLI_TMP/stacks/$CLI_STACK/compose.yaml" down -v --remove-orphans >/dev/null 2>&1
+            # Import refuses an existing stack dir (the live one is
+            # still on disk). The peer runs as the operator here, so
+            # a plain rm -rf of the state dir is enough.
+            rm -rf "$CLI_TMP/stacks/$CLI_STACK"
+            if $F import "$CLI_STACK" "$CLI_TMP/snap.tar.gz" >/dev/null 2>&1; then ok "cli: import snapshot"; else bad "cli: import snapshot"; fi
+            if $F deploy "$CLI_STACK" 2>/dev/null | grep -q "healthy"; then ok "cli: redeploy after import"; else bad "cli: redeploy after import"; fi
+            if docker run --rm -v "$CLI_VOL:/vol" alpine:3.20 cat /vol/marker.txt 2>/dev/null | grep -q "$CLI_MARKER"; then
+                ok "cli: volume data survived export/import ($CLI_MARKER)"
+            else
+                bad "cli: volume data lost"
+            fi
+            if $F deploy no-such-stack >/dev/null 2>&1; then bad "cli: missing stack must fail (exit)"; else ok "cli: missing stack exits non-zero"; fi
+            kill $PEER_PID >/dev/null 2>&1
+        fi
+        docker compose -p "$CLI_STACK" -f "$CLI_TMP/stacks/$CLI_STACK/compose.yaml" down -v --remove-orphans >/dev/null 2>&1
+        docker volume rm -f "$CLI_VOL" >/dev/null 2>&1
+        rm -rf "$CLI_TMP" 2>/dev/null
+        set -e
+    fi
+fi
+
 # ---- Layer 2: compose smoke (first-milestone flow) ---------------------
 # The milestone flow: build the peer image (deploy/), start two peer
 # containers against one daemon, write a stack dir on B, verify it

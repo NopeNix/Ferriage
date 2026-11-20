@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/NopeNix/Ferriage/internal/api"
 	"github.com/NopeNix/Ferriage/internal/deploy"
 	"github.com/NopeNix/Ferriage/internal/health"
 	"github.com/NopeNix/Ferriage/internal/identity"
@@ -61,6 +62,8 @@ func main() {
 
 	mux := http.NewServeMux()
 	mux.Handle("/healthz", health.NewHandler())
+	mux.Handle("/openapi.json", api.Handler())
+	mux.Handle("/openapi.yaml", api.Handler())
 	mux.Handle("/stacks", stacks.NewHandler())
 	mux.Handle("/", sync.NewHandler(store, idn.ID()))
 	snapshot.Register(mux, stateDir, idn.ID())

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 
+	"github.com/NopeNix/Ferriage/internal/api"
 	"github.com/NopeNix/Ferriage/internal/version"
 )
 
@@ -60,10 +61,10 @@ func (h *Handler) peer(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(map[string]string{
-		"peer_id": h.PeerID,
-		"version": version.Version,
-		"commit":  version.Commit,
+	_ = json.NewEncoder(w).Encode(api.PeerResponse{
+		PeerID:  h.PeerID,
+		Version: version.Version,
+		Commit:  version.Commit,
 	})
 }
 
@@ -84,7 +85,7 @@ func statusFor(err error) int {
 func writeErr(w http.ResponseWriter, status int, msg string) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(map[string]string{"error": msg})
+	_ = json.NewEncoder(w).Encode(api.ErrorResponse{Error: msg})
 }
 
 func itoa(n int) string {

@@ -8,9 +8,9 @@ function shortImage(image: string): string {
   return name.split(":")[0];
 }
 
-export function StackCard({ stack }: { stack: Stack }) {
+export function StackCard({ stack, onOpen }: { stack: Stack; onOpen?: () => void }) {
   const healthy = stack.running_count === stack.container_count && stack.container_count > 0;
-  return (
+  const body = (
     <Card data-testid="stack-card">
       <CardHeader>
         <div className="flex items-center justify-between gap-2">
@@ -49,5 +49,11 @@ export function StackCard({ stack }: { stack: Stack }) {
         </ul>
       </CardContent>
     </Card>
+  );
+  if (!onOpen) return body;
+  return (
+    <button type="button" className="block w-full text-left" data-testid="stack-card-wrap" onClick={onOpen}>
+      {body}
+    </button>
   );
 }

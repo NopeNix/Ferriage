@@ -6,6 +6,8 @@ package snapshot
 import (
 	"encoding/json"
 	"net/http"
+
+	"github.com/NopeNix/Ferriage/internal/api"
 )
 
 // clientFor returns a Backend for the request's daemon; created
@@ -76,7 +78,7 @@ func (h *Handler) importSnapshot(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(m)
+	_ = json.NewEncoder(w).Encode(toManifest(m))
 }
 
 func statusFor(err error) int {
@@ -94,8 +96,24 @@ func statusFor(err error) int {
 func writeErr(w http.ResponseWriter, status int, msg string) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(map[string]string{"error": msg})
+	_ = json.NewEncoder(w).Encode(api.ErrorResponse{Error: msg})
 }
 
 // Compile-time check: dockerBackend satisfies Backend.
 var _ Backend = (*dockerBackend)(nil)
+
+// toManifest maps snapshot.Manifest onto the typed API contract.
+func toManifest(m *Manifest) api.SnapshotManifest {
+	vols := make([]api.VolumeDesc, 0, len(m.Volumes))
+	for _, v := range m.Volumes {
+		vols = append(vols, api.VolumeDesc{Name: v.Name})
+	}
+	return api.SnapshotManifest{
+		FormatVersion: m.FormatVersion,
+		Stack:         m.Stack,
+		CreatedAt:     m.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
+		CreatedBy:     m.CreatedBy,
+		Files:         m.Files,
+		Volumes:       vols,
+	}
+}

@@ -6,6 +6,8 @@ import (
 	"os"
 	"path/filepath"
 	"time"
+
+	"github.com/NopeNix/Ferriage/internal/api"
 )
 
 // Register serves POST /stacks/{name}/deploy on the peer mux.
@@ -52,7 +54,26 @@ func (h *Handler) deploy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(res)
+	_ = json.NewEncoder(w).Encode(toResponse(res))
+}
+
+// toResponse maps deploy.Result onto the typed API contract.
+func toResponse(r *Result) api.DeployResponse {
+	svcs := make([]api.DeploySvc, 0, len(r.Services))
+	for _, s := range r.Services {
+		svcs = append(svcs, api.DeploySvc{
+			Name:      s.Name,
+			Health:    s.Health,
+			HasHealth: s.HasHealth,
+			Running:   s.Running,
+		})
+	}
+	return api.DeployResponse{
+		Stack:    r.Stack,
+		Services: svcs,
+		Healthy:  r.Healthy,
+		Detail:   r.Detail,
+	}
 }
 
 func statusFor(err error) int {
@@ -65,5 +86,5 @@ func statusFor(err error) int {
 func writeErr(w http.ResponseWriter, status int, msg string) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(map[string]string{"error": msg})
+	_ = json.NewEncoder(w).Encode(api.ErrorResponse{Error: msg})
 }

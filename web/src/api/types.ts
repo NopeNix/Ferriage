@@ -1,6 +1,24 @@
-// Typed view of the peer HTTP API (CONCEPT: API-first). Shapes mirror
-// internal/adopt.Stack and the /peer handler — keep in sync by hand
-// until the typed-API pass (Phase 3) generates them.
+// GENERATED from the peer OpenAPI contract — never edit by hand.
+// Source: internal/api (GET /openapi.json). Regenerate with
+//   node web/scripts/gen-types.mjs
+// or keep it honest with: npm run gen:check
+//
+// Field names and nullability mirror the Go structs; required[]
+// in the contract decides which fields are optional here.
+
+export interface Error {
+  error: string;
+}
+
+export interface Health {
+  status: string;
+}
+
+export interface Peer {
+  peer_id: string;
+  version: string;
+  commit: string;
+}
 
 export interface Service {
   name: string;
@@ -19,12 +37,48 @@ export interface Stack {
   container_count: number;
 }
 
-export interface StacksResponse {
+export interface Stacks {
   stacks: Stack[];
 }
 
-export interface PeerInfo {
+export interface DeploySvc {
+  name: string;
+  health: string;
+  has_healthcheck: boolean;
+  running: boolean;
+}
+
+export interface DeployResult {
+  stack: string;
+  services: DeploySvc[];
+  healthy: boolean;
+  detail?: string;
+}
+
+export interface VolumeDesc {
+  name: string;
+}
+
+export interface SnapshotManifest {
+  format_version: number;
+  stack: string;
+  created_at: string;
+  created_by?: string;
+  files: string[];
+  volumes?: VolumeDesc[];
+}
+
+export interface SyncEntry {
+  path: string;
+  sha256: string;
+  size: number;
+  mtime: string;
+  updated_at: string;
   peer_id: string;
-  version: string;
-  commit: string;
+}
+
+export interface SyncManifest {
+  peer_id: string;
+  generated_at: string;
+  entries: SyncEntry[];
 }

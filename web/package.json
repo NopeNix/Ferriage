@@ -8,7 +8,9 @@
     "build": "tsc -b && vite build",
     "lint": "oxlint",
     "test": "vitest run && node --test bff/*.test.mjs",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "gen": "node scripts/gen-types.mjs",
+    "gen:check": "node scripts/gen-check.mjs"
   },
   "dependencies": {
     "class-variance-authority": "^0.7.1",

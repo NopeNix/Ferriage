@@ -1,24 +1,27 @@
 import { useCallback, useEffect, useState } from "react";
 import { AlertTriangle, Ship, RefreshCw } from "lucide-react";
 import { api } from "./api/client";
-import type { PeerInfo, Stack } from "./api/types";
+import type { Peer, Stack } from "./api/types";
 import { StackCard } from "./components/StackCard";
+import { StackDetail } from "./components/StackDetail";
 import { Badge } from "./components/ui/badge";
 import { Button } from "./components/ui/button";
 
 type State =
   | { status: "loading" }
   | { status: "error"; message: string }
-  | { status: "ok"; stacks: Stack[]; peer: PeerInfo; sub: string | null };
+  | { status: "ok"; stacks: Stack[]; peer: Peer; sub: string | null };
 
 export default function App() {
   const [state, setState] = useState<State>({ status: "loading" });
+  const [selected, setSelected] = useState<Stack | null>(null);
 
   const load = useCallback(async () => {
     setState({ status: "loading" });
     try {
-      const [stacks, peer, session] = await Promise.all([api.stacks(), api.peer(), api.session()]);
-      setState({ status: "ok", stacks: stacks.stacks, peer, sub: session?.sub ?? null });
+      const [stacksResp, peer, session] = await Promise.all([api.stacks(), api.peer(), api.session()]);
+      setState({ status: "ok", stacks: stacksResp.stacks, peer, sub: session?.sub ?? null });
+      setSelected((cur) => (cur ? stacksResp.stacks.find((s) => s.name === cur.name) ?? cur : null));
     } catch (err) {
       setState({ status: "error", message: err instanceof Error ? err.message : String(err) });
     }
@@ -86,12 +89,14 @@ export default function App() {
             <p className="mb-4 text-sm text-muted-foreground" data-testid="stack-count">
               {state.stacks.length} stack{state.stacks.length === 1 ? "" : "s"} adopted
             </p>
-            {state.stacks.length === 0 ? (
+            {selected ? (
+              <StackDetail stack={selected} onBack={() => setSelected(null)} onChanged={() => void load()} />
+            ) : state.stacks.length === 0 ? (
               <p data-testid="empty">No stacks yet. Deploy one with the peer API or `docker compose up`.</p>
             ) : (
               <div className="grid gap-4 md:grid-cols-2">
                 {state.stacks.map((s) => (
-                  <StackCard key={s.name} stack={s} />
+                  <StackCard key={s.name} stack={s} onOpen={() => setSelected(s)} />
                 ))}
               </div>
             )}

@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, fireEvent } from "@testing-library/react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import App from "./App";
 
@@ -46,6 +46,22 @@ describe("App", () => {
     expect(screen.getByTestId("stack-count")).toHaveTextContent("1 stack adopted");
     expect(screen.getByTestId("peer-badge")).toHaveTextContent("abcdef123456");
     expect(screen.getByTestId("user-badge")).toHaveTextContent("dev@example.com");
+    unmount();
+  });
+
+  it("opens the stack detail when a card is clicked", async () => {
+    mockFetch((url) => (url.includes("/stacks") ? STACKS : PEER));
+    const { unmount } = render(<App />);
+    await waitFor(() => expect(screen.getByTestId("stack-card")).toBeInTheDocument());
+    fireEvent.click(screen.getByTestId("stack-card-wrap"));
+    await waitFor(() => expect(screen.getByTestId("detail-name")).toBeInTheDocument());
+    expect(screen.getByTestId("detail-name")).toHaveTextContent("demo");
+    expect(screen.getByTestId("deploy-btn")).toBeInTheDocument();
+    expect(screen.getByTestId("export-btn")).toBeInTheDocument();
+    expect(screen.getByTestId("import-btn")).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId("detail-back"));
+    await waitFor(() => expect(screen.getByTestId("stack-card")).toBeInTheDocument());
+    expect(screen.getByTestId("stack-name")).toHaveTextContent("demo");
     unmount();
   });
 
