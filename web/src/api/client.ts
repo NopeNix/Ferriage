@@ -1,4 +1,4 @@
-import type { ComposeFile, DeployResult, Error as ApiError, ExecResult, Logs, NotifyStatus, NotifyTest, OnboardResponse, Peer, SnapshotManifest, Stacks, Stats } from "./types";
+import type { Audit, ComposeFile, DeployResult, Error as ApiError, ExecResult, Logs, NotifyStatus, NotifyTest, OnboardResponse, Peer, SnapshotManifest, Stacks, Stats } from "./types";
 
 // The UI talks to the BFF at /api/*, which proxies to the peer.
 // The peer API is typed by the OpenAPI contract served at
@@ -155,6 +155,18 @@ export const api = {
       throw new Error(`/hosts/onboard: ${res.status} ${body?.error ?? res.statusText}`);
     }
     return (await res.json()) as OnboardResponse;
+  },
+  // Audit log (ADR 0008): read-only, newest first. The BFF
+  // sets X-Ferriage-Actor from the verified session; the
+  // peer records it as reported identity.
+  audit: (opts?: { limit?: number; actor?: string; action?: string; since?: string }) => {
+    const q = new URLSearchParams();
+    if (opts?.limit !== undefined) q.set("limit", String(opts.limit));
+    if (opts?.actor) q.set("actor", opts.actor);
+    if (opts?.action) q.set("action", opts.action);
+    if (opts?.since) q.set("since", opts.since);
+    const suffix = q.toString() ? `?${q.toString()}` : "";
+    return request<Audit>("GET", `/audit${suffix}`);
   },
   // Shoutrrr notifications (ADR 0007): redacted status + test.
   // URLs are env-only on the peer and never cross the API.

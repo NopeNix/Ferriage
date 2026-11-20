@@ -22,6 +22,7 @@
 //	POST /stacks/{name}/import       snapshot in (internal/snapshot)
 //	POST /hosts/onboard              SSH onboarding (internal/onboard, ADR 0006)
 //	GET  /notify, POST /notify/test  redacted Shoutrrr status/test (internal/notify, ADR 0007)
+//	GET  /audit                      audit log, newest first (internal/audit, ADR 0008)
 //	GET  /sync/manifest, /sync/blob  state-sync wire (ADR 0001)
 package api
 
@@ -346,6 +347,29 @@ const Document = `{
         }
       }
     },
+    "/audit": {
+      "get": {
+        "operationId": "listAudit",
+        "summary": "Audit log entries, newest first (ADR 0008: who did what, when). Read-only; there is no write or delete endpoint.",
+        "parameters": [
+          { "name": "limit", "in": "query", "schema": { "type": "integer", "minimum": 1, "maximum": 500, "default": 50 } },
+          { "name": "actor", "in": "query", "schema": { "type": "string" } },
+          { "name": "action", "in": "query", "schema": { "type": "string" } },
+          { "name": "since", "in": "query", "schema": { "type": "string", "format": "date-time" } }
+        ],
+        "responses": {
+          "200": {
+            "description": "Audit entries (newest first)",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Audit" }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" }
+        }
+      }
+    },
     "/sync/manifest": {
       "get": {
         "operationId": "getSyncManifest",
@@ -643,6 +667,25 @@ const Document = `{
         "properties": {
           "sent": { "type": "boolean" },
           "event": { "type": "string" }
+        }
+      },
+      "AuditEntry": {
+        "type": "object",
+        "required": ["ts", "actor", "action", "status"],
+        "properties": {
+          "ts": { "type": "string", "format": "date-time" },
+          "actor": { "type": "string" },
+          "action": { "type": "string" },
+          "target": { "type": "string" },
+          "status": { "type": "integer" },
+          "detail": { "type": "string" }
+        }
+      },
+      "Audit": {
+        "type": "object",
+        "required": ["entries"],
+        "properties": {
+          "entries": { "type": "array", "items": { "$ref": "#/components/schemas/AuditEntry" } }
         }
       },
       "ComposeFile": {

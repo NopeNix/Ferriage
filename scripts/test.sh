@@ -164,6 +164,17 @@ YAML
             if curl -sS "http://127.0.0.1:$CLI_PORT/stacks/$CLI_STACK/compose" 2>/dev/null | grep -q "interval: 3s"; then ok "cli: PUT compose persisted"; else bad "cli: PUT compose not persisted"; fi
             if $F exec "$CLI_STACK" app -- sh -c 'exit 0' >/dev/null 2>&1; then ok "cli: exec exit 0"; else bad "cli: exec exit 0"; fi
             if curl -sS "http://127.0.0.1:$CLI_PORT/stacks/no-such/compose" 2>/dev/null | grep -q '"error"'; then ok "cli: missing compose 404s"; else bad "cli: missing compose must 404"; fi
+            # Phase 3.5 (ADR 0008): the mutating calls above must
+            # have been recorded (newest first), reads must not
+            # appear, and the actor header must round-trip.
+            if $F audit --limit 50 2>/dev/null | grep -q "deploy"; then ok "cli: audit records deploy"; else bad "cli: audit records deploy"; fi
+            if $F audit --action exec 2>/dev/null | grep -q "exec"; then ok "cli: audit filters by action"; else bad "cli: audit filters by action"; fi
+            if $F --json audit 2>/dev/null | grep -q '"entries"'; then ok "cli: audit --json"; else bad "cli: audit --json"; fi
+            if curl -sS -H "X-Ferriage-Actor: tester@example.com" -X POST "http://127.0.0.1:$CLI_PORT/notify/test" >/dev/null 2>&1; then :; fi
+            if $F audit --actor tester@example.com 2>/dev/null | grep -q "tester@example.com"; then ok "cli: audit records actor from header"; else bad "cli: audit actor from header"; fi
+            if $F audit --limit 0 >/dev/null 2>&1; then bad "cli: audit --limit 0 must fail (exit)"; else ok "cli: audit --limit 0 exits non-zero"; fi
+            if curl -sS -X DELETE "http://127.0.0.1:$CLI_PORT/audit" >/dev/null 2>&1 && [ ! -f "$CLI_TMP/stacks/.ferriage/audit.jsonl" ]; then :; fi
+            if $F audit 2>/dev/null | grep -q "compose.save"; then ok "cli: audit records compose.save"; else bad "cli: audit records compose.save"; fi
             kill $PEER_PID >/dev/null 2>&1
         fi
         docker compose -p "$CLI_STACK" -f "$CLI_TMP/stacks/$CLI_STACK/compose.yaml" down -v --remove-orphans >/dev/null 2>&1

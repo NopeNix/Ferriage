@@ -6,6 +6,7 @@ import { StackCard } from "./components/StackCard";
 import { StackDetail } from "./components/StackDetail";
 import { OnboardHost } from "./components/OnboardHost";
 import { NotifyStatus } from "./components/NotifyStatus";
+import { AuditLog } from "./components/AuditLog";
 import { Badge } from "./components/ui/badge";
 import { Button } from "./components/ui/button";
 
@@ -98,6 +99,9 @@ export default function App() {
                 </div>
                 <div className="mb-8">
                   <NotifyStatus />
+                </div>
+                <div className="mb-8">
+                  <AuditLog />
                 </div>
               </>
             )}

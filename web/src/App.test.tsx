@@ -27,6 +27,12 @@ function mockFetch(impl: (url: string) => unknown) {
       if (u.includes("/auth/me")) {
         return { ok: true, status: 200, statusText: "OK", json: async () => ({ sub: "dev@example.com", csrf: "tok" }) };
       }
+      if (u.includes("/audit")) {
+        return { ok: true, status: 200, statusText: "OK", json: async () => ({ entries: [] }) };
+      }
+      if (u.includes("/notify")) {
+        return { ok: true, status: 200, statusText: "OK", json: async () => ({ enabled: false, channels: 0 }) };
+      }
       return { ok: true, status: 200, statusText: "OK", json: async () => impl(u) };
     }),
   );

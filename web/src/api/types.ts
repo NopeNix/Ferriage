@@ -100,6 +100,19 @@ export interface OnboardResponse {
   error?: string;
 }
 
+export interface AuditEntry {
+  ts: string;
+  actor: string;
+  action: string;
+  target?: string;
+  status: number;
+  detail?: string;
+}
+
+export interface Audit {
+  entries: AuditEntry[];
+}
+
 export interface ComposeFile {
   name: string;
   file: string;

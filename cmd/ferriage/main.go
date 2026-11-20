@@ -16,6 +16,7 @@
 // ferriage [--peer URL] [--json] onboard <address> --key <file> [--user U] [--image IMG] [--peer-url URL] [--port N]
 // ferriage [--peer URL] [--json] notify status
 // ferriage [--peer URL] [--json] notify test
+// ferriage [--peer URL] [--json] audit [--limit N] [--actor U] [--action A] [--since TS]
 // ferriage version
 //
 // The peer defaults to $FERRIAGE_PEER, else http://localhost:8080.
@@ -55,6 +56,7 @@ Usage:
   ferriage [--peer URL] [--json] onboard <address> --key <file> [--user U] [--image IMG] [--peer-url URL] [--port N]
   ferriage [--peer URL] [--json] notify status
   ferriage [--peer URL] [--json] notify test
+  ferriage [--peer URL] [--json] audit [--limit N] [--actor U] [--action A] [--since TS]
   ferriage version
   ferriage help
 
@@ -310,6 +312,69 @@ func run(args []string, stdout, stderr io.Writer) error {
 		default:
 			return usageErr("notify: unknown subcommand %q (status | test)", argv[0])
 		}
+	case "audit":
+		q := url.Values{}
+		for i := 0; i < len(argv); i++ {
+			switch argv[i] {
+			case "--limit":
+				if i+1 >= len(argv) {
+					return usageErr("audit --limit needs a value")
+				}
+				i++
+				n, err := strconv.Atoi(argv[i])
+				if err != nil || n < 1 || n > 500 {
+					return usageErr("audit --limit must be 1..500")
+				}
+				q.Set("limit", argv[i])
+			case "--actor":
+				if i+1 >= len(argv) {
+					return usageErr("audit --actor needs a value")
+				}
+				i++
+				q.Set("actor", argv[i])
+			case "--action":
+				if i+1 >= len(argv) {
+					return usageErr("audit --action needs a value")
+				}
+				i++
+				q.Set("action", argv[i])
+			case "--since":
+				if i+1 >= len(argv) {
+					return usageErr("audit --since needs a value")
+				}
+				i++
+				q.Set("since", argv[i])
+			default:
+				return usageErr("audit: unknown flag %q", argv[i])
+			}
+		}
+		path := "/audit"
+		if enc := q.Encode(); enc != "" {
+			path += "?" + enc
+		}
+		var resp api.AuditResponse
+		if err := c.get(path, &resp); err != nil {
+			return err
+		}
+		if opts.json {
+			return writeJSON(stdout, &resp)
+		}
+		if len(resp.Entries) == 0 {
+			_, _ = fmt.Fprintln(stdout, "no audit entries")
+			return nil
+		}
+		for _, e := range resp.Entries {
+			_, _ = fmt.Fprintf(stdout, "%s  %s  %s", e.Ts, e.Actor, e.Action)
+			if e.Target != "" {
+				_, _ = fmt.Fprintf(stdout, "  %s", e.Target)
+			}
+			_, _ = fmt.Fprintf(stdout, "  HTTP %d", e.Status)
+			if e.Detail != "" {
+				_, _ = fmt.Fprintf(stdout, "  %s", e.Detail)
+			}
+			_, _ = fmt.Fprintln(stdout)
+		}
+		return nil
 	case "onboard":
 		if len(argv) < 1 {
 			return usageErr("onboard needs an address (host or host:port)")

@@ -185,3 +185,22 @@ type NotifyTestResponse struct {
 	Sent  bool   `json:"sent"`
 	Event string `json:"event"`
 }
+
+// AuditEntry is one audit-log line (ADR 0008): who did what, when.
+// Actor is the reported identity (BFF session sub via
+// X-Ferriage-Actor, or "unknown" for unauthenticated peer calls).
+// Status is the HTTP status of the recorded operation. Detail is
+// short and secret-free (never keys, bodies, or URLs).
+type AuditEntry struct {
+	Ts     string `json:"ts"`
+	Actor  string `json:"actor"`
+	Action string `json:"action"`
+	Target string `json:"target,omitempty"`
+	Status int    `json:"status"`
+	Detail string `json:"detail,omitempty"`
+}
+
+// AuditResponse is the body of GET /audit (newest first).
+type AuditResponse struct {
+	Entries []AuditEntry `json:"entries"`
+}

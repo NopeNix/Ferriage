@@ -47,6 +47,29 @@ function isWsUpgrade(req) {
   return (req.headers.upgrade || "").toLowerCase() === "websocket";
 }
 
+// The actor for the audit log (ADR 0008): the verified OIDC
+// session subject, or "dev" when auth is off (the SPA's dev
+// session stub). The peer records it as reported identity —
+// never an auth boundary (ADR 0004: peer is plaintext on the
+// trusted net). Client-supplied copies of the header are
+// always stripped and replaced here, so a browser cannot forge
+// another operator's audit entries through the BFF.
+function actorHeader(req) {
+  const session = auth ? auth.sessionFrom(req) : null;
+  return session?.sub || "dev";
+}
+
+// Headers the BFF controls: the audit actor is set here,
+// never forwarded from the client.
+function proxiedHeaders(req) {
+  return {
+    ...Object.fromEntries(
+      Object.entries(req.headers).filter(([k]) => !["host", "connection", "cookie", "x-ferriage-actor"].includes(k)),
+    ),
+    "x-ferriage-actor": actorHeader(req),
+  };
+}
+
 // WebSocket upgrades (the console) need a raw TCP pipe — fetch()
 // cannot hijack. Forwards the request head verbatim to the
 // peer and pipes bytes both ways until either side closes.
@@ -72,9 +95,7 @@ async function proxyApi(req, res) {
   try {
     upstream = await fetch(url, {
       method: req.method,
-      headers: Object.fromEntries(
-        Object.entries(req.headers).filter(([k]) => !["host", "connection", "cookie"].includes(k)),
-      ),
+      headers: proxiedHeaders(req),
       body: req.method === "GET" || req.method === "HEAD" ? undefined : req,
       duplex: "half",
     });
@@ -179,8 +200,12 @@ server.on("upgrade", (req, socket, head) => {
     return;
   }
   // Rewrite the path: drop the /api prefix the SPA uses.
+  // The actor header is set here (ADR 0008), never forwarded.
   const peerPath = req.url.replace(/^\/api/, "");
-  const lines = [`${req.method} ${peerPath} HTTP/1.1`, ...Object.entries(req.headers).map(([k, v]) => `${k}: ${v}`), "", ""];
+  const headers = { ...req.headers };
+  delete headers["x-ferriage-actor"];
+  headers["x-ferriage-actor"] = actorHeader(req);
+  const lines = [`${req.method} ${peerPath} HTTP/1.1`, ...Object.entries(headers).map(([k, v]) => `${k}: ${v}`), "", ""];
   proxyWsUpgrade(lines.join("\r\n"), socket);
 });
 

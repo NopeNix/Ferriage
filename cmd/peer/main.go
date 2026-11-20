@@ -9,10 +9,12 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/NopeNix/Ferriage/internal/api"
+	"github.com/NopeNix/Ferriage/internal/audit"
 	"github.com/NopeNix/Ferriage/internal/compose"
 	"github.com/NopeNix/Ferriage/internal/console"
 	"github.com/NopeNix/Ferriage/internal/deploy"
@@ -95,10 +97,19 @@ func main() {
 	console.Register(mux)
 	onboard.Register(mux, stateDir, selfURL, notifier)
 	notify.Register(mux, notifier)
+	// Audit log (ADR 0008): append-only JSONL under
+	// .ferriage/, recorded by middleware around the whole
+	// mux so actor/status are captured uniformly. Reads and
+	// mesh machinery are never recorded.
+	auditStore := audit.New(stateDir, auditMaxLines(), os.Getenv("FERRIAGE_AUDIT_DISABLE") == "1")
+	audit.Register(mux, auditStore)
+	if !auditStore.Disabled() {
+		log.Printf("ferriage audit: logging to .ferriage/audit.jsonl (max %d lines)", auditMaxLines())
+	}
 
 	srv := &http.Server{
 		Addr:              addr,
-		Handler:           mux,
+		Handler:           audit.Middleware(auditStore, mux),
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 
@@ -126,6 +137,21 @@ func main() {
 		os.Exit(1)
 	}
 	log.Println("ferriage peer stopped")
+}
+
+// auditMaxLines reads FERRIAGE_AUDIT_MAX_LINES (default
+// audit.DefaultMaxLines). An unparsable or non-positive value
+// falls back to the default, so recovery never disables the log.
+func auditMaxLines() int {
+	v := os.Getenv("FERRIAGE_AUDIT_MAX_LINES")
+	if v == "" {
+		return audit.DefaultMaxLines
+	}
+	n, err := strconv.Atoi(v)
+	if err != nil || n <= 0 {
+		return audit.DefaultMaxLines
+	}
+	return n
 }
 
 func splitPeers(v string) []string {
