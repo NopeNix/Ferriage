@@ -62,6 +62,14 @@ func TestSchemasMatchGoStructs(t *testing.T) {
 		{"DeployResult", reflect.TypeOf(DeployResponse{})},
 		{"VolumeDesc", reflect.TypeOf(VolumeDesc{})},
 		{"SnapshotManifest", reflect.TypeOf(SnapshotManifest{})},
+		{"LogLine", reflect.TypeOf(LogLine{})},
+		{"Logs", reflect.TypeOf(LogsResponse{})},
+		{"ContainerStats", reflect.TypeOf(ContainerStats{})},
+		{"Stats", reflect.TypeOf(StatsResponse{})},
+		{"ExecRequest", reflect.TypeOf(ExecRequest{})},
+		{"ExecResult", reflect.TypeOf(ExecResponse{})},
+		{"ComposeFile", reflect.TypeOf(ComposeResponse{})},
+		{"ComposeSave", reflect.TypeOf(ComposeSaveRequest{})},
 	}
 	for _, tc := range cases {
 		s, ok := schemas[tc.name]

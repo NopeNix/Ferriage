@@ -13,12 +13,17 @@ import (
 	"time"
 
 	"github.com/NopeNix/Ferriage/internal/api"
+	"github.com/NopeNix/Ferriage/internal/compose"
+	"github.com/NopeNix/Ferriage/internal/console"
 	"github.com/NopeNix/Ferriage/internal/deploy"
+	"github.com/NopeNix/Ferriage/internal/exec"
 	"github.com/NopeNix/Ferriage/internal/health"
 	"github.com/NopeNix/Ferriage/internal/identity"
+	"github.com/NopeNix/Ferriage/internal/logs"
 	"github.com/NopeNix/Ferriage/internal/snapshot"
 	"github.com/NopeNix/Ferriage/internal/stacks"
 	"github.com/NopeNix/Ferriage/internal/state"
+	"github.com/NopeNix/Ferriage/internal/stats"
 	"github.com/NopeNix/Ferriage/internal/sync"
 )
 
@@ -68,6 +73,11 @@ func main() {
 	mux.Handle("/", sync.NewHandler(store, idn.ID()))
 	snapshot.Register(mux, stateDir, idn.ID())
 	deploy.Register(mux, stateDir)
+	logs.Register(mux)
+	stats.Register(mux)
+	exec.Register(mux)
+	compose.Register(mux, stateDir)
+	console.Register(mux)
 
 	srv := &http.Server{
 		Addr:              addr,

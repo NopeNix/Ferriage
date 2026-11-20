@@ -4,6 +4,7 @@
 // /auth/* is the login dance. Phase 2.2. The frontend stays a
 // stateless reader (CONCEPT: UI is a mesh participant).
 import { createServer } from "node:http";
+import net from "node:net";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -11,6 +12,7 @@ import { Auth } from "./auth.mjs";
 
 const PORT = Number(process.env.PORT || "5173");
 const PEER = (process.env.FERRIAGE_PEER || "http://localhost:8080").replace(/\/$/, "");
+const PEER_URL = new URL(PEER);
 const DIST = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "dist");
 
 const AUTH_ENABLED = Boolean(process.env.FERRIAGE_OIDC_ISSUER);
@@ -39,6 +41,29 @@ const TYPES = {
 function send(res, status, body) {
   res.writeHead(status, { "Content-Type": "application/json" });
   res.end(JSON.stringify(body));
+}
+
+function isWsUpgrade(req) {
+  return (req.headers.upgrade || "").toLowerCase() === "websocket";
+}
+
+// WebSocket upgrades (the console) need a raw TCP pipe — fetch()
+// cannot hijack. Forwards the request head verbatim to the
+// peer and pipes bytes both ways until either side closes.
+function proxyWsUpgrade(head, socket) {
+  const upstream = net.createConnection(PEER_URL.port, PEER_URL.hostname, () => {
+    upstream.write(head);
+    socket.pipe(upstream);
+    upstream.pipe(socket);
+  });
+  for (const sock of [socket, upstream]) {
+    sock.on("error", () => {
+      socket.destroy();
+      upstream.destroy();
+    });
+  }
+  socket.on("close", () => upstream.destroy());
+  upstream.on("close", () => socket.destroy());
 }
 
 async function proxyApi(req, res) {
@@ -140,6 +165,23 @@ const server = createServer((req, res) => {
   } else {
     serveStatic(req, res).catch(() => send(res, 404, { error: "not found" }));
   }
+});
+
+server.on("upgrade", (req, socket, head) => {
+  const url = new URL(req.url, "http://bff");
+  if (!url.pathname.startsWith("/api/")) {
+    socket.destroy();
+    return;
+  }
+  if (auth && !auth.checkApi(req)) {
+    socket.write("HTTP/1.1 401 Unauthorized\r\nConnection: close\r\n\r\n");
+    socket.destroy();
+    return;
+  }
+  // Rewrite the path: drop the /api prefix the SPA uses.
+  const peerPath = req.url.replace(/^\/api/, "");
+  const lines = [`${req.method} ${peerPath} HTTP/1.1`, ...Object.entries(req.headers).map(([k, v]) => `${k}: ${v}`), "", ""];
+  proxyWsUpgrade(lines.join("\r\n"), socket);
 });
 
 server.listen(PORT, () =>

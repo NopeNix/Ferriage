@@ -82,3 +82,53 @@ export interface SyncManifest {
   generated_at: string;
   entries: SyncEntry[];
 }
+
+export interface ComposeFile {
+  name: string;
+  file: string;
+  content: string;
+  compose_file_used?: string;
+}
+
+export interface ComposeSave {
+  content: string;
+}
+
+export interface ContainerStats {
+  container: string;
+  cpu_percent: number;
+  memory_bytes: number;
+  memory_limit: number;
+  memory_percent: number;
+  net_rx_bytes: number;
+  net_tx_bytes: number;
+}
+
+export interface ExecRequest {
+  cmd: string[];
+  tty?: boolean;
+}
+
+export interface ExecResult {
+  exec_id: string;
+  running: boolean;
+  exit_code: number;
+  output: string;
+  truncated: boolean;
+}
+
+export interface LogLine {
+  ts?: string;
+  stream: string;
+  message: string;
+}
+
+export interface Logs {
+  container: string;
+  lines: LogLine[];
+  truncated: boolean;
+}
+
+export interface Stats {
+  stats: ContainerStats[];
+}

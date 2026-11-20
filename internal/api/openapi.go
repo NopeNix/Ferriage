@@ -13,6 +13,11 @@
 //	GET  /peer                       peer identity (internal/sync)
 //	GET  /stacks                     adopted stacks (internal/stacks)
 //	POST /stacks/{name}/deploy       deploy + health gate (internal/deploy)
+//	GET  /stacks/{name}/services/{svc}/logs  tails (internal/logs)
+//	GET  /stacks/{name}/stats        live stats (internal/stats)
+//	POST /stacks/{name}/services/{svc}/exec  one-shot exec (internal/exec)
+//	GET|PUT /stacks/{name}/compose   compose file CRUD (internal/compose)
+//	WS   /stacks/{name}/services/{svc}/console  live exec console (internal/console)
 //	POST /stacks/{name}/export       snapshot out (internal/snapshot)
 //	POST /stacks/{name}/import       snapshot in (internal/snapshot)
 //	GET  /sync/manifest, /sync/blob  state-sync wire (ADR 0001)
@@ -148,6 +153,137 @@ const Document = `{
         }
       }
     },
+    "/stacks/{name}/services/{svc}/logs": {
+      "get": {
+        "operationId": "getServiceLogs",
+        "summary": "Tail of one container's logs (non-follow, bounded)",
+        "parameters": [
+          { "$ref": "#/components/parameters/StackName" },
+          { "$ref": "#/components/parameters/ServiceName" },
+          { "name": "tail", "in": "query", "schema": { "type": "integer", "minimum": 1, "maximum": 10000, "default": 200 } },
+          { "name": "since", "in": "query", "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": {
+            "description": "Log lines",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Logs" }
+              }
+            }
+          },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "502": { "$ref": "#/components/responses/UpstreamError" }
+        }
+      }
+    },
+    "/stacks/{name}/stats": {
+      "get": {
+        "operationId": "getStackStats",
+        "summary": "One-shot live stats snapshot for every container of a stack",
+        "parameters": [{ "$ref": "#/components/parameters/StackName" }],
+        "responses": {
+          "200": {
+            "description": "Stats snapshot",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Stats" }
+              }
+            }
+          },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "502": { "$ref": "#/components/responses/UpstreamError" }
+        }
+      }
+    },
+    "/stacks/{name}/services/{svc}/exec": {
+      "post": {
+        "operationId": "execInService",
+        "summary": "Run a one-shot command in one running container",
+        "parameters": [
+          { "$ref": "#/components/parameters/StackName" },
+          { "$ref": "#/components/parameters/ServiceName" }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/ExecRequest" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Exec outcome",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ExecResult" }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "502": { "$ref": "#/components/responses/UpstreamError" }
+        }
+      }
+    },
+    "/stacks/{name}/services/{svc}/console": {
+      "get": {
+        "operationId": "consoleService",
+        "summary": "Interactive exec console over WebSocket (binary frames = terminal bytes; JSON text frames = control: resize/close)",
+        "parameters": [
+          { "$ref": "#/components/parameters/StackName" },
+          { "$ref": "#/components/parameters/ServiceName" }
+        ],
+        "responses": {
+          "101": { "description": "Socket upgrade; one exec session per connection" }
+        }
+      }
+    },
+    "/stacks/{name}/compose": {
+      "get": {
+        "operationId": "getStackCompose",
+        "summary": "Read a stack's Compose file",
+        "parameters": [{ "$ref": "#/components/parameters/StackName" }],
+        "responses": {
+          "200": {
+            "description": "Compose file content",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ComposeFile" }
+              }
+            }
+          },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      },
+      "put": {
+        "operationId": "putStackCompose",
+        "summary": "Write a stack's Compose file (full replace, atomic)",
+        "parameters": [{ "$ref": "#/components/parameters/StackName" }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/ComposeSave" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Saved Compose file",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ComposeFile" }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "413": { "$ref": "#/components/responses/TooLarge" }
+        }
+      }
+    },
     "/sync/manifest": {
       "get": {
         "operationId": "getSyncManifest",
@@ -194,6 +330,13 @@ const Document = `{
   },
   "components": {
     "parameters": {
+      "ServiceName": {
+        "name": "svc",
+        "in": "path",
+        "required": true,
+        "schema": { "type": "string" },
+        "description": "Compose service name within the stack"
+      },
       "StackName": {
         "name": "name",
         "in": "path",
@@ -329,7 +472,82 @@ const Document = `{
           "volumes": { "type": "array", "items": { "$ref": "#/components/schemas/VolumeDesc" } }
         }
       },
+      "LogLine": {
+        "type": "object",
+        "required": ["stream", "message"],
+        "properties": {
+          "ts": { "type": "string" },
+          "stream": { "type": "string" },
+          "message": { "type": "string" }
+        }
+      },
+      "Logs": {
+        "type": "object",
+        "required": ["container", "lines", "truncated"],
+        "properties": {
+          "container": { "type": "string" },
+          "lines": { "type": "array", "items": { "$ref": "#/components/schemas/LogLine" } },
+          "truncated": { "type": "boolean" }
+        }
+      },
+      "ContainerStats": {
+        "type": "object",
+        "required": ["container", "cpu_percent", "memory_bytes", "memory_limit", "memory_percent", "net_rx_bytes", "net_tx_bytes"],
+        "properties": {
+          "container": { "type": "string" },
+          "cpu_percent": { "type": "number" },
+          "memory_bytes": { "type": "integer", "format": "int64" },
+          "memory_limit": { "type": "integer", "format": "int64" },
+          "memory_percent": { "type": "number" },
+          "net_rx_bytes": { "type": "integer", "format": "int64" },
+          "net_tx_bytes": { "type": "integer", "format": "int64" }
+        }
+      },
+      "Stats": {
+        "type": "object",
+        "required": ["stats"],
+        "properties": {
+          "stats": { "type": "array", "items": { "$ref": "#/components/schemas/ContainerStats" } }
+        }
+      },
+      "ExecRequest": {
+        "type": "object",
+        "required": ["cmd"],
+        "properties": {
+          "cmd": { "type": "array", "items": { "type": "string" } },
+          "tty": { "type": "boolean" }
+        }
+      },
+      "ExecResult": {
+        "type": "object",
+        "required": ["exec_id", "running", "exit_code", "output", "truncated"],
+        "properties": {
+          "exec_id": { "type": "string" },
+          "running": { "type": "boolean" },
+          "exit_code": { "type": "integer" },
+          "output": { "type": "string" },
+          "truncated": { "type": "boolean" }
+        }
+      },
+      "ComposeFile": {
+        "type": "object",
+        "required": ["name", "file", "content"],
+        "properties": {
+          "name": { "type": "string" },
+          "file": { "type": "string" },
+          "content": { "type": "string" },
+          "compose_file_used": { "type": "string" }
+        }
+      },
+      "ComposeSave": {
+        "type": "object",
+        "required": ["content"],
+        "properties": {
+          "content": { "type": "string" }
+        }
+      },
       "SyncEntry": {
+
         "type": "object",
         "required": ["path", "sha256", "size", "mtime", "updated_at", "peer_id"],
         "properties": {

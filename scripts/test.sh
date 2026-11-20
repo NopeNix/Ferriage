@@ -108,7 +108,7 @@ if [ "$SKIP_CONTAINER" -eq 0 ] && [ -f go.mod ] && [ -d cmd/ferriage ]; then
 services:
   app:
     image: alpine:3.20
-    command: ["sh", "-c", "mkdir -p /data && echo $CLI_MARKER > /data/marker.txt && sleep 1000"]
+    command: ["sh", "-c", "mkdir -p /data && echo $CLI_MARKER > /data/marker.txt && echo cli-volume-marker && sleep 1000"]
     volumes:
       - data:/data
     healthcheck:
@@ -149,6 +149,21 @@ YAML
                 bad "cli: volume data lost"
             fi
             if $F deploy no-such-stack >/dev/null 2>&1; then bad "cli: missing stack must fail (exit)"; else ok "cli: missing stack exits non-zero"; fi
+            # Phase 3.2: logs/stats/exec/compose twins against the
+            # redeployed stack (same peer, same daemon).
+            if $F logs "$CLI_STACK" app --tail 50 2>/dev/null | grep -q "cli-volume-marker"; then ok "cli: logs tails container output"; else bad "cli: logs"; fi
+            if $F --json logs "$CLI_STACK" app --tail 5 2>/dev/null | grep -q '"lines"'; then ok "cli: logs --json"; else bad "cli: logs --json"; fi
+            if $F stats "$CLI_STACK" 2>/dev/null | grep -q "CPU"; then ok "cli: stats one-shot"; else bad "cli: stats"; fi
+            if $F --json stats "$CLI_STACK" 2>/dev/null | grep -q '"cpu_percent"'; then ok "cli: stats --json"; else bad "cli: stats --json"; fi
+            if $F exec "$CLI_STACK" app -- cat /data/marker.txt 2>/dev/null | grep -q "$CLI_MARKER"; then ok "cli: exec one-shot"; else bad "cli: exec"; fi
+            if $F --json exec "$CLI_STACK" app -- sh -c 'exit 7' 2>/dev/null | grep -q '"exit_code": 7'; then ok "cli: exec reports exit code"; else bad "cli: exec exit code"; fi
+            if curl -sS "http://127.0.0.1:$CLI_PORT/stacks/$CLI_STACK/compose" 2>/dev/null | grep -q "compose_file"; then ok "cli: GET compose file"; else bad "cli: GET compose"; fi
+            COMPOSE_MOD="$(sed 's/interval: 2s/interval: 3s/' "$CLI_TMP/stacks/$CLI_STACK/compose.yaml")"
+            printf '{"content": %s}' "$(printf '%s' "$COMPOSE_MOD" | python3 -c 'import sys,json; print(json.dumps(sys.stdin.read()))')" > "$CLI_TMP/put.json"
+            if curl -sS -X PUT "http://127.0.0.1:$CLI_PORT/stacks/$CLI_STACK/compose" -H 'Content-Type: application/json' --data-binary @"$CLI_TMP/put.json" 2>/dev/null | grep -q "interval: 3s"; then ok "cli: PUT compose file"; else bad "cli: PUT compose"; fi
+            if curl -sS "http://127.0.0.1:$CLI_PORT/stacks/$CLI_STACK/compose" 2>/dev/null | grep -q "interval: 3s"; then ok "cli: PUT compose persisted"; else bad "cli: PUT compose not persisted"; fi
+            if $F exec "$CLI_STACK" app -- sh -c 'exit 0' >/dev/null 2>&1; then ok "cli: exec exit 0"; else bad "cli: exec exit 0"; fi
+            if curl -sS "http://127.0.0.1:$CLI_PORT/stacks/no-such/compose" 2>/dev/null | grep -q '"error"'; then ok "cli: missing compose 404s"; else bad "cli: missing compose must 404"; fi
             kill $PEER_PID >/dev/null 2>&1
         fi
         docker compose -p "$CLI_STACK" -f "$CLI_TMP/stacks/$CLI_STACK/compose.yaml" down -v --remove-orphans >/dev/null 2>&1

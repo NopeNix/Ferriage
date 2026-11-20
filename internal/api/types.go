@@ -76,3 +76,61 @@ type SnapshotManifest struct {
 type ErrorResponse struct {
 	Error string `json:"error"`
 }
+
+// LogLine is one line of a container's log output.
+type LogLine struct {
+	Ts      string `json:"ts,omitempty"`
+	Stream  string `json:"stream"`
+	Message string `json:"message"`
+}
+
+// LogsResponse is the body of GET /stacks/{name}/services/{svc}/logs.
+type LogsResponse struct {
+	Container string    `json:"container"`
+	Lines     []LogLine `json:"lines"`
+	Truncated bool      `json:"truncated"`
+}
+
+// ContainerStats is one container's live resource snapshot.
+type ContainerStats struct {
+	Container     string  `json:"container"`
+	CPUPercent    float64 `json:"cpu_percent"`
+	MemoryBytes   uint64  `json:"memory_bytes"`
+	MemoryLimit   uint64  `json:"memory_limit"`
+	MemoryPercent float64 `json:"memory_percent"`
+	NetRxBytes    uint64  `json:"net_rx_bytes"`
+	NetTxBytes    uint64  `json:"net_tx_bytes"`
+}
+
+// StatsResponse is the body of GET /stacks/{name}/stats.
+type StatsResponse struct {
+	Stats []ContainerStats `json:"stats"`
+}
+
+// ExecRequest is the body of POST /stacks/{name}/services/{svc}/exec.
+type ExecRequest struct {
+	Cmd []string `json:"cmd"`
+	Tty bool     `json:"tty,omitempty"`
+}
+
+// ExecResponse is the body of POST /stacks/{name}/services/{svc}/exec.
+type ExecResponse struct {
+	ExecID    string `json:"exec_id"`
+	Running   bool   `json:"running"`
+	ExitCode  int    `json:"exit_code"`
+	Output    string `json:"output"`
+	Truncated bool   `json:"truncated"`
+}
+
+// ComposeResponse is the body of GET /stacks/{name}/compose.
+type ComposeResponse struct {
+	Name            string `json:"name"`
+	File            string `json:"file"`
+	Content         string `json:"content"`
+	ComposeFileUsed string `json:"compose_file_used,omitempty"`
+}
+
+// ComposeSaveRequest is the body of PUT /stacks/{name}/compose.
+type ComposeSaveRequest struct {
+	Content string `json:"content"`
+}

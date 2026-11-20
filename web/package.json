@@ -9,13 +9,17 @@
     "lint": "oxlint",
     "test": "vitest run && node --test bff/*.test.mjs",
     "preview": "vite preview",
+    "postbuild": "node scripts/copy-monaco.mjs",
     "gen": "node scripts/gen-types.mjs",
     "gen:check": "node scripts/gen-check.mjs"
   },
   "dependencies": {
+    "@monaco-editor/react": "^4.7.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "lucide-react": "^1.77.0",
+    "monaco-editor": "^0.57.0",
+    "monaco-yaml": "^5.5.1",
     "openid-client": "^6.9.1",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",

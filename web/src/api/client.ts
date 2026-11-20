@@ -1,4 +1,4 @@
-import type { DeployResult, Error as ApiError, Peer, SnapshotManifest, Stacks } from "./types";
+import type { ComposeFile, DeployResult, Error as ApiError, ExecResult, Logs, Peer, SnapshotManifest, Stacks, Stats } from "./types";
 
 // The UI talks to the BFF at /api/*, which proxies to the peer.
 // The peer API is typed by the OpenAPI contract served at
@@ -10,12 +10,25 @@ export interface Session {
   csrf: string;
 }
 
+export function consoleUrl(stack: string, svc: string): string {
+  const proto = window.location.protocol === "https:" ? "wss:" : "ws:";
+  return `${proto}//${window.location.host}/api/stacks/${encodeURIComponent(stack)}/services/${encodeURIComponent(svc)}/console`;
+}
+
 let sessionPromise: Promise<Session | null> | null = null;
 
 export function getSession(): Promise<Session | null> {
   if (!sessionPromise) {
     sessionPromise = fetch("/auth/me")
-      .then(async (res) => (res.ok ? ((await res.json()) as Session) : null))
+      .then(async (res) => {
+        if (res.ok) return (await res.json()) as Session;
+        // Dev mode: the BFF has no OIDC issuer configured and
+        // proxies /api/* without auth (ADR 0004). The /auth/me
+        // route is 404 there; treat it as an open dev session
+        // with a stub CSRF (the peer does not check CSRF in dev).
+        if (res.status === 404) return { sub: "dev", csrf: "dev" };
+        return null;
+      })
       .catch(() => null);
   }
   return sessionPromise;
@@ -47,6 +60,38 @@ export const api = {
   peer: () => request<Peer>("GET", "/peer"),
   session: getSession,
   deploy: (name: string) => request<DeployResult>("POST", `/stacks/${enc(name)}/deploy`),
+  logs: (name: string, svc: string, tail = 200) =>
+    request<Logs>("GET", `/stacks/${enc(name)}/services/${enc(svc)}/logs?tail=${tail}`),
+  stats: (name: string) => request<Stats>("GET", `/stacks/${enc(name)}/stats`),
+  exec: async (name: string, svc: string, cmd: string[]): Promise<ExecResult> => {
+    const session = await getSession();
+    if (!session) throw new Error("401 Unauthorized");
+    const res = await fetch(`/api/stacks/${enc(name)}/services/${enc(svc)}/exec`, {
+      method: "POST",
+      headers: { "x-csrf-token": session.csrf, "content-type": "application/json" },
+      body: JSON.stringify({ cmd }),
+    });
+    if (!res.ok) {
+      const body = (await res.json().catch(() => null)) as ApiError | null;
+      throw new Error(`${res.status} ${body?.error ?? res.statusText}`);
+    }
+    return (await res.json()) as ExecResult;
+  },
+  compose: (name: string) => request<ComposeFile>("GET", `/stacks/${enc(name)}/compose`),
+  saveCompose: async (name: string, content: string): Promise<ComposeFile> => {
+    const session = await getSession();
+    if (!session) throw new Error("401 Unauthorized");
+    const res = await fetch(`/api/stacks/${enc(name)}/compose`, {
+      method: "PUT",
+      headers: { "x-csrf-token": session.csrf, "content-type": "application/json" },
+      body: JSON.stringify({ content }),
+    });
+    if (!res.ok) {
+      const body = (await res.json().catch(() => null)) as ApiError | null;
+      throw new Error(`${res.status} ${body?.error ?? res.statusText}`);
+    }
+    return (await res.json()) as ComposeFile;
+  },
   exportStack: async (name: string): Promise<Blob> => {
     const session = await getSession();
     if (!session) throw new Error(`/stacks/${name}/export: 401 Unauthorized`);

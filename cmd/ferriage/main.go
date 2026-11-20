@@ -10,6 +10,9 @@
 // ferriage [--peer URL] [--json] deploy <stack>
 // ferriage [--peer URL] export <stack> [-o file.tar.gz]
 // ferriage [--peer URL] import <stack> <file.tar.gz>
+// ferriage [--peer URL] [--json] logs <stack> <service> [--tail N]
+// ferriage [--peer URL] [--json] stats <stack>
+// ferriage [--peer URL] [--json] exec <stack> <service> -- <cmd...>
 // ferriage version
 //
 // The peer defaults to $FERRIAGE_PEER, else http://localhost:8080.
@@ -27,6 +30,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -42,6 +46,9 @@ Usage:
   ferriage [--peer URL] [--json] deploy <stack>
   ferriage [--peer URL] export <stack> [-o file.tar.gz]
   ferriage [--peer URL] import <stack> <file.tar.gz>
+  ferriage [--peer URL] [--json] logs <stack> <service> [--tail N]
+  ferriage [--peer URL] [--json] stats <stack>
+  ferriage [--peer URL] [--json] exec <stack> <service> -- <cmd...>
   ferriage version
   ferriage help
 
@@ -188,6 +195,76 @@ func run(args []string, stdout, stderr io.Writer) error {
 		}
 		_, _ = fmt.Fprintf(stdout, "imported %s (%d files, %d volumes)\n", resp.Stack, len(resp.Files), len(resp.Volumes))
 		return nil
+	case "logs":
+		if len(argv) < 2 {
+			return usageErr("logs needs a stack and service name")
+		}
+		tail := 200
+		for i := 2; i < len(argv); i++ {
+			if argv[i] == "--tail" && i+1 < len(argv) {
+				i++
+				n, err := strconv.Atoi(argv[i])
+				if err != nil || n < 1 || n > 10000 {
+					return usageErr("logs --tail must be 1..10000")
+				}
+				tail = n
+			}
+		}
+		var resp api.LogsResponse
+		path := "/stacks/" + url.PathEscape(argv[0]) + "/services/" + url.PathEscape(argv[1]) + "/logs?tail=" + strconv.Itoa(tail)
+		if err := c.get(path, &resp); err != nil {
+			return err
+		}
+		if opts.json {
+			return writeJSON(stdout, &resp)
+		}
+		for _, l := range resp.Lines {
+			if l.Ts != "" {
+				_, _ = fmt.Fprintf(stdout, "%s ", l.Ts)
+			}
+			_, _ = fmt.Fprintln(stdout, l.Message)
+		}
+		if resp.Truncated {
+			_, _ = fmt.Fprintln(stdout, "... (truncated to tail)")
+		}
+		return nil
+	case "stats":
+		if len(argv) < 1 {
+			return usageErr("stats needs a stack name")
+		}
+		var resp api.StatsResponse
+		if err := c.get("/stacks/"+url.PathEscape(argv[0])+"/stats", &resp); err != nil {
+			return err
+		}
+		if opts.json {
+			return writeJSON(stdout, &resp)
+		}
+		for _, s := range resp.Stats {
+			_, _ = fmt.Fprintf(stdout, "%s  CPU %.1f%%  MEM %d/%d (%.0f%%)  NET %d/%d\n",
+				s.Container, s.CPUPercent, s.MemoryBytes, s.MemoryLimit, s.MemoryPercent, s.NetRxBytes, s.NetTxBytes)
+		}
+		return nil
+	case "exec":
+		if len(argv) < 4 || argv[2] != "--" {
+			return usageErr("exec <stack> <service> -- <cmd...>")
+		}
+		var resp api.ExecResponse
+		if err := c.postJSON("/stacks/"+url.PathEscape(argv[0])+"/services/"+url.PathEscape(argv[1])+"/exec",
+			jsonBytes(map[string]any{"cmd": argv[3:]}), &resp); err != nil {
+			return err
+		}
+		if opts.json {
+			return writeJSON(stdout, &resp)
+		}
+		_, _ = fmt.Fprint(stdout, resp.Output)
+		if resp.Output == "" || !strings.HasSuffix(resp.Output, "\n") {
+			_, _ = fmt.Fprintln(stdout)
+		}
+		_, _ = fmt.Fprintf(stdout, "exit %d\n", resp.ExitCode)
+		if resp.Truncated {
+			_, _ = fmt.Fprintln(stdout, "(output truncated)")
+		}
+		return nil
 	default:
 		return usageErr("unknown command %q", cmd)
 	}
@@ -208,6 +285,11 @@ func writeJSON(w io.Writer, v any) error {
 	enc := json.NewEncoder(w)
 	enc.SetIndent("", "  ")
 	return enc.Encode(v)
+}
+
+func jsonBytes(v any) []byte {
+	b, _ := json.Marshal(v)
+	return b
 }
 
 type client struct {

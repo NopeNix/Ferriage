@@ -2,6 +2,9 @@ import { useState } from "react";
 import { ArrowLeft, Download, Rocket, Upload, X } from "lucide-react";
 import { api } from "../api/client";
 import type { DeployResult, Stack } from "../api/types";
+import { ComposeEditor } from "./ComposeEditor";
+import { StatsPanel } from "./StatsPanel";
+import { ServiceTools } from "./ServiceTools";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "./ui/card";
@@ -74,6 +77,11 @@ export function StackDetail({ stack, onBack, onChanged }: { stack: Stack; onBack
               </li>
             ))}
           </ul>
+          {stack.services.map((s) => (
+            <ServiceTools key={`${s.name}-${s.container}`} stack={stack.name} service={s.name} />
+          ))}
+          <StatsPanel stack={stack.name} />
+          <ComposeEditor stack={stack.name} onSaved={onChanged} />
 
           <div className="flex flex-wrap items-center gap-2">
             <Button size="sm" onClick={() => void run("deploy", () => api.deploy(stack.name))} disabled={action !== null} data-testid="deploy-btn">

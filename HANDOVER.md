@@ -5,7 +5,7 @@
 > `.openhands/memory/`. Read order: this file → memory index →
 > `AGENTS.md`.
 
-**Updated:** 2026-11-20, session 012
+**Updated:** 2026-11-20, session 013
 **Where the work is:** Phases 0–2 done. Phase 1 (milestone, 1.1–1.6):
 peer+`/healthz`, state dir + adopt by labels, ADR 0001 manifest
 file-sync + identity, ADR 0002 snapshot export/import, health-gated
@@ -14,26 +14,29 @@ shell): `web/`** (Vite+React+Tailwind+shadcn, stack list + peer
 status) **+ BFF Zone-1 OIDC gate** (ADR 0004, Dex dev IdP ADR 0003)
 **+ layer-3 visual baseline**. **Phase 3 item 1 done: typed API +
 CLI + stack detail** — `internal/api` contract behind
-`/openapi.json`, `cmd/ferriage` CLI twin (stacks/peer/deploy/
-export/import/version, `--json`), `StackDetail` view
-(deploy/export/import + CSRF), layer-1.5 CLI e2e in `test.sh`.
-Full routine `29/0` (layer1 6, CLI 10, layer2 12, layer3 1).
+`/openapi.json`, `cmd/ferriage` CLI twin, `StackDetail` view.
+**Phase 3 item 2 done: logs/stats/exec + Monaco** (ADR 0005) —
+peer logs/stats/exec/compose handlers + hand-rolled WS console,
+`ServiceTools`/`StatsPanel`/`ComposeEditor` in the UI, BFF raw
+upgrade pipe, CLI logs/stats/exec twins. Full routine `40/0`.
 `CONCEPT.md` canonical.
-**Stack:** Go peer, React/shadcn UI (separate container), Iroh mesh
-(later). GitHub `NopeNix/Ferriage`, Docker Hub `nopenix/ferriage`.
-**Still open:** Phase 3 items 2–8 (logs/stats/exec+Monaco, SSH
-onboarding, Shoutrrr, audit, auto-update, MCP, restic polish);
-first image tag (Phase 4 ship, user-gated).
-**Next session:** Phase 3 item 2 — logs/stats/exec (stream,
-stats, container console; Monaco editor with compose schema).
+**Stack:** Go peer, React/shadcn UI (separate container, Monaco
+vendored offline), Iroh mesh (later). GitHub `NopeNix/Ferriage`,
+Docker Hub `nopenix/ferriage`.
+**Still open:** Phase 3 items 3–8 (SSH onboarding, Shoutrrr,
+audit, auto-update, MCP, restic polish); first image tag
+(Phase 4 ship, user-gated).
+**Next session:** Phase 3 item 3 — SSH onboarding (zero-touch:
+address + key → Docker check → one Ferriage container).
 **Dev host:** home box (prototyping). **Prod:** VPS + LAN hosts —
 never test mesh/agent changes against them without confirmation.
 Dev ports on this box: peer 18080, BFF 19080, Dex 18081 (8080 is
 Open WebUI). Kill the dev peer before `scripts/test.sh`.
-**Live instance:** none (dev stack stopped after session 012).
+**Live instance:** none (dev stack stopped after session 013).
 
 ## Session log
 
+- [013 — phase 3 logs/stats/exec](handover/2026-11-20-013-phase3-logs-stats-exec.md) — ADR 0005: logs/stats/exec + WS console (hand-rolled RFC6455) + Monaco vendored offline + BFF raw upgrade pipe; full routine 40/0
 - [012 — phase 3 api+cli](handover/2026-11-20-012-phase3-api-cli.md) — internal/api typed contract + /openapi.json + drift test; cmd/ferriage CLI twin; StackDetail view; full routine 29/0
 - [011 — phase 2 ui shell](handover/2026-11-20-011-phase2-ui-shell.md) — web/ + BFF OIDC gate (Dex dev IdP), layer-3 baseline, full routine 19/0
 - [010 — phase 1.6 compose + smoke](handover/2026-11-20-010-phase1-6-compose-smoke.md) — deploy/Dockerfile + deploy/docker-compose.yml; layer-2 milestone smoke green (16/0); sync is pull-only, so checks are direction-aware

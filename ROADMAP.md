@@ -71,9 +71,9 @@ its volume, healthy on arrival. Record host + URL in `HANDOVER.md`.
 
 ## Phase 3 — Breadth (in priority order)
 
-1. **API-first + CLI** — typed API, every UI action has a CLI twin
+1. **API-first + CLI** — typed API, every UI action has a CLI twin ✓ 2026-11-20
 2. **Logs / stats / exec** — stream, stats, container console,
-   Monaco editor (compose schema autocomplete + validation + diff)
+   Monaco editor (compose schema autocomplete + validation + diff) ✓ 2026-11-20 (ADR 0005)
 3. **SSH onboarding** — zero-touch: address + key → Docker check →
    one Ferriage container (confirm before non-dev hosts)
 4. **Notifications** — Shoutrrr (built-in channel)

@@ -27,3 +27,4 @@ date: YYYY-MM-DD
 | 0002 | [Snapshot format: single gzip+tar](0002-snapshot-format.md) | accepted | one-file snapshot; volumes via helper-container exec capture (not restic repo) |
 | 0003 | [Dev IdP: Dex (not Zitadel)](0003-dev-identity-provider.md) | accepted | single-container dev OIDC; prod IdP is a separate decision |
 | 0004 | [Zone-1 auth in the UI BFF, not the peer](0004-ui-bff-auth.md) | accepted | BFF holds OIDC session + proxies /api; peer stays plaintext on trusted net |
+| 0005 | [Logs/stats/exec + Monaco (Phase 3 item 2)](0005-logs-stats-exec-monaco.md) | accepted | polling JSON for logs/stats; hand-rolled RFC 6455 console; Monaco vendored offline; BFF raw upgrade pipe for WS |
