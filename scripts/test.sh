@@ -321,12 +321,63 @@ YAML
 fi
 
 # ---- Layer 3: Playwright visual baselines (UI only) --------------------
+# Screenshot the live UI (peer + BFF from web/dist, auth off = dev
+# mode) with headless Chrome and pixel-diff against the committed
+# baselines in tests/baselines/. Chrome binary: $CHROME_BIN, else
+# Playwright's chromium, else /opt/google/chrome/chrome.
 if [ "$SKIP_PLAYWRIGHT" -eq 0 ]; then
     log "Layer 3: Playwright visual baselines"
     if [ ! -d tests/baselines ]; then
         skip "no tests/baselines yet — visual layer skipped"
+    elif ! command -v node >/dev/null 2>&1 || [ ! -d web/dist ]; then
+        skip "node or web/dist missing — visual layer skipped (run npm run build in web/)"
     else
-        bad "playwright baselines not wired yet"
+        CHROME_BIN=""
+        if [ -n "${CHROME_BIN:-}" ] && [ -x "$CHROME_BIN" ]; then
+            :
+        elif command -v chromium >/dev/null 2>&1; then
+            CHROME_BIN="chromium"
+        else
+            for c in /home/user/.cache/ms-playwright/chromium-*/chrome-linux64/chrome /opt/google/chrome/chrome; do
+                [ -x "$c" ] && CHROME_BIN="$c" && break
+            done
+        fi
+        if [ -z "$CHROME_BIN" ]; then
+            skip "no Chrome binary found — visual layer skipped"
+        else
+            set +e
+            VIS_TMP="$(mktemp -d /tmp/ferriage-visual.XXXXXX)"
+            PEER_PID=""
+            BFF_PID=""
+            cleanup_vis() {
+                [ -n "$BFF_PID" ] && kill "$BFF_PID" >/dev/null 2>&1
+                [ -n "$PEER_PID" ] && kill "$PEER_PID" >/dev/null 2>&1
+                rm -rf "$VIS_TMP"
+            }
+            mkdir -p "$VIS_TMP/stacks"
+            FERRIAGE_ADDR=:18082 FERRIAGE_STATE_DIR="$VIS_TMP/stacks" go run ./cmd/peer >"$VIS_TMP/peer.log" 2>&1 &
+            PEER_PID=$!
+            (cd web && PORT=19082 FERRIAGE_PEER=http://localhost:18082 node bff/index.mjs >"$VIS_TMP/bff.log" 2>&1) &
+            BFF_PID=$!
+            for i in $(seq 1 30); do curl -fsS http://127.0.0.1:19082/ >/dev/null 2>&1 && break; sleep 0.5; done
+
+            # Pixel diff: 1280x800 screenshot vs baseline; the
+            # threshold is generous on purpose — a tripwire for
+            # gross layout breakage, not a font-renderer pin.
+            "$CHROME_BIN" --headless=new --no-sandbox --disable-gpu --disable-dev-shm-usage --hide-scrollbars --window-size=1280,800 --virtual-time-budget=5000 --screenshot="$VIS_TMP/shot.png" http://127.0.0.1:19082/ >/dev/null 2>&1
+            if [ -s "$VIS_TMP/shot.png" ]; then
+                DIFF_OUT="$(node scripts/png-diff.mjs "$VIS_TMP/shot.png" tests/baselines/ui-2026-11-20-stack-list.png 2 2>&1)"
+                if [ $? -eq 0 ]; then
+                    ok "layer3: stack-list baseline ($DIFF_OUT)"
+                else
+                    bad "layer3: stack-list baseline drifted ($DIFF_OUT; regenerate after sign-off)"
+                fi
+            else
+                bad "layer3: screenshot failed"
+            fi
+            cleanup_vis
+            set -e
+        fi
     fi
 fi
 

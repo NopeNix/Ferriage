@@ -1,0 +1,31 @@
+# syntax=docker/dockerfile:1
+# Ferriage UI image (Phase 2.1): builds web/ (React/Vite/Tailwind) and
+# ships the built SPA + the BFF (bff/index.mjs) on node:24-alpine.
+# The BFF serves dist/ and proxies /api/* to the peer. No npm install
+# or build tools are needed at runtime.
+#
+# Build:  docker build -f deploy/Dockerfile.ui -t ferriage-ui:dev .
+# The repo root is the build context (web/ lives there).
+
+FROM node:24-alpine AS build
+
+WORKDIR /web
+COPY web/package.json web/package-lock.json ./
+RUN npm ci
+COPY web/ ./
+RUN npm run build
+
+FROM node:24-alpine
+
+WORKDIR /app
+# The BFF needs openid-client at runtime (bff/auth.mjs); production
+# install only, no devDependencies.
+COPY web/package.json web/package-lock.json ./
+RUN npm ci --omit=dev --ignore-scripts
+COPY --from=build /web/dist ./dist
+COPY web/bff ./bff
+
+ENV PORT=5173 \
+    FERRIAGE_PEER=http://localhost:8080
+EXPOSE 5173
+CMD ["node", "bff/index.mjs"]

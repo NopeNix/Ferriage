@@ -5,31 +5,30 @@
 > `.openhands/memory/`. Read order: this file → memory index →
 > `AGENTS.md`.
 
-**Updated:** 2026-11-20, session 010
-**Where the work is:** Phase 0 closed. **Phase 1 DONE (1.1–1.6):**
+**Updated:** 2026-11-20, session 011
+**Where the work is:** Phases 0–2 done. Phase 1 (milestone, 1.1–1.6):
 peer+`/healthz`, state dir + adopt by labels, ADR 0001 manifest
-file-sync + identity, ADR 0002 snapshot export/import (copy-API
-volume capture), deploy with health gate, and now
-**`deploy/Dockerfile` + `deploy/docker-compose.yml` + layer-2
-smoke in `scripts/test.sh`** — full milestone flow green:
-build peer image → two peers healthy → deploy on B → sync B→A →
-adopt → export with volume → import on A → deploy on A →
-**volume data survived the move**. `scripts/test.sh` full: 16/0.
-`scripts/test.sh --fast`: 4/0. `CONCEPT.md` canonical.
-**Stack:** Go peer, React/shadcn UI (separate container), Iroh mesh.
-GitHub `NopeNix/Ferriage`, Docker Hub `nopenix/ferriage`.
-**Still open:** Phase 2 UI shell (first pixels; dev IdP for OIDC);
-first image tag (Phase 4 ship).
-**Next session:** Phase 2 — minimal React/shadcn UI container
-(stack list, peer status) + Zone-1 auth gate; pick dev IdP per
-ROADMAP open question 2.
+file-sync + identity, ADR 0002 snapshot export/import, health-gated
+deploy, `deploy/Dockerfile`+compose + layer-2 smoke. **Phase 2 (UI
+shell): `web/`** (Vite+React+Tailwind+shadcn, stack list + peer
+status) **+ BFF Zone-1 OIDC gate** (ADR 0004, Dex dev IdP ADR 0003)
+**+ layer-3 visual baseline** (`scripts/png-diff.mjs`). Full routine
+`19/0` (layer1 6, layer2 12, layer3 1). `CONCEPT.md` canonical.
+**Stack:** Go peer, React/shadcn UI (separate container), Iroh mesh
+(later). GitHub `NopeNix/Ferriage`, Docker Hub `nopenix/ferriage`.
+**Still open:** Phase 3 (API-first + CLI, stack detail, logs/exec);
+first image tag (Phase 4 ship, user-gated).
+**Next session:** Phase 3 — typed API + CLI (every UI action has a
+CLI twin); stack detail view.
 **Dev host:** home box (prototyping). **Prod:** VPS + LAN hosts —
 never test mesh/agent changes against them without confirmation.
-**Live instance:** none (nothing deployed yet; only smoke peers,
-which are cleaned up).
+Dev ports on this box: peer 18080, BFF 19080, Dex 18081 (8080 is
+Open WebUI). Kill the dev peer before `scripts/test.sh`.
+**Live instance:** none (dev stack stopped after session 011).
 
 ## Session log
 
+- [011 — phase 2 ui shell](handover/2026-11-20-011-phase2-ui-shell.md) — web/ + BFF OIDC gate (Dex dev IdP), layer-3 baseline, full routine 19/0
 - [010 — phase 1.6 compose + smoke](handover/2026-11-20-010-phase1-6-compose-smoke.md) — deploy/Dockerfile + deploy/docker-compose.yml; layer-2 milestone smoke green (16/0); sync is pull-only, so checks are direction-aware
 - [009 — phase 1.5 deploy](handover/2026-11-20-009-phase1-5-deploy.md) — POST /stacks/{name}/deploy + health gate; CLI not compose-go (one-line decision); live proof: healthy / no-healthcheck / 502-unhealthy / redeploy
 - [008 — phase 1.4 finish](handover/2026-11-20-008-phase1-4-finish.md) — finished 007's uncommitted work; attach-stdin data loss fixed via daemon copy APIs; live round-trip + commit

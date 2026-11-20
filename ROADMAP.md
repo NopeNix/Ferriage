@@ -58,14 +58,14 @@ The milestone that proves the category (CONCEPT § "First milestone").
 **Exit:** one existing stack adopted on each host, moved across with
 its volume, healthy on arrival. Record host + URL in `HANDOVER.md`.
 
-## Phase 2 — UI shell (first pixels)
+## Phase 2 — UI shell (first pixels) ✓ 2026-11-20
 
-- Minimal React/shadcn UI container — stack list, peer status
-  ("offline in UI" for dead hosts), stack detail
-- Zone-1 auth gate: OIDC-only login, hardened (rate limit, CSRF,
-  strict cookies) — agents checklist in `docs/security.md`
-- Playwright baseline: first screenshot in `tests/baselines/`;
-  visual diff from here on (AGENTS.md §2)
+- [x] Minimal React/shadcn UI container — stack list, peer status
+  ("offline in UI" for dead hosts). Stack detail is Phase 3.
+- [x] Zone-1 auth gate: OIDC-only login in the BFF (rate limit,
+  CSRF, strict cookies) — ADR 0004. Dev IdP: Dex (ADR 0003).
+- [x] Playwright baseline: `tests/baselines/` + png-diff in
+  `scripts/test.sh` layer 3 (scripts/png-diff.mjs).
 
 **Exit:** live UI in a real browser, screenshot baseline committed.
 
@@ -105,7 +105,7 @@ narratives, anything re-discoverable with `ls`/`grep`.
 
 1. ~~Docker Hub namespace?~~ — `nopenix/ferriage` (confirmed 2026-11-20).
    First image tag still to record in `docs/deployment.md` at ship time.
-2. IdP for dev OIDC? (any standard provider; pick one and note it)
-   — needed for Phase 2, not Phase 1.
+2. ~~IdP for dev OIDC?~~ — Dex (ADR 0003), dev-only. Prod IdP
+   is a separate Phase 4 decision.
 3. ~~State-sync mechanism: git-style vs file-sync~~ — decided
    2026-11-20: manifest-based file sync (ADR 0001).

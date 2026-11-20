@@ -1,0 +1,27 @@
+issuer: http://localhost:18081
+storage:
+  type: sqlite3
+  config:
+    file: /tmp/dex.db
+web:
+  http: 0.0.0.0:18081
+oidc:
+  skipEmailVerification: true
+staticClients:
+  - id: ferriage-web
+    redirectURIs:
+      - 'http://localhost:19080/auth/callback'
+    name: 'Ferriage Web'
+    secret: ferriage-web-dev-secret
+enablePasswordDB: true
+staticPasswords:
+  - email: "operator@ferriage.dev"
+    hash: "$2b$12$XSCG7WR5mcA6uzaU8lkb.ejFN.xS2KnFXbmKexSrOllkxzQtAfxm."
+    username: "operator"
+    userID: "operator"
+connectors:
+  - id: mock
+    type: mockCallback
+    name: Mock
+    enablePasswordDB: false
+webserver: false

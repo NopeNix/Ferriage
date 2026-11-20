@@ -25,3 +25,5 @@ date: YYYY-MM-DD
 |---|---|---|---|
 | 0001 | [State sync: manifest-based file sync](0001-state-sync.md) | accepted | manifest+blob protocol, LWW per file; transport swappable to Iroh later |
 | 0002 | [Snapshot format: single gzip+tar](0002-snapshot-format.md) | accepted | one-file snapshot; volumes via helper-container exec capture (not restic repo) |
+| 0003 | [Dev IdP: Dex (not Zitadel)](0003-dev-identity-provider.md) | accepted | single-container dev OIDC; prod IdP is a separate decision |
+| 0004 | [Zone-1 auth in the UI BFF, not the peer](0004-ui-bff-auth.md) | accepted | BFF holds OIDC session + proxies /api; peer stays plaintext on trusted net |
