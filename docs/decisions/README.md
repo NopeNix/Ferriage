@@ -29,3 +29,4 @@ date: YYYY-MM-DD
 | 0004 | [Zone-1 auth in the UI BFF, not the peer](0004-ui-bff-auth.md) | accepted | BFF holds OIDC session + proxies /api; peer stays plaintext on trusted net |
 | 0005 | [Logs/stats/exec + Monaco (Phase 3 item 2)](0005-logs-stats-exec-monaco.md) | accepted | polling JSON for logs/stats; hand-rolled RFC 6455 console; Monaco vendored offline; BFF raw upgrade pipe for WS |
 | 0006 | [SSH onboarding (Phase 3 item 3)](0006-ssh-onboarding.md) | accepted | native Go SSH, key-only, TO-FU/pinned host keys, get.docker.com install, peer pulls from operator peer |
+| 0007 | [Shoutrrr notifications (Phase 3 item 4)](0007-shoutrrr-notifications.md) | accepted | env-only URLs (FERRIAGE_NOTIFY_URLS, option A), best-effort async, redacted GET /notify + test |

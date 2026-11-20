@@ -20,6 +20,8 @@
 //	WS   /stacks/{name}/services/{svc}/console  live exec console (internal/console)
 //	POST /stacks/{name}/export       snapshot out (internal/snapshot)
 //	POST /stacks/{name}/import       snapshot in (internal/snapshot)
+//	POST /hosts/onboard              SSH onboarding (internal/onboard, ADR 0006)
+//	GET  /notify, POST /notify/test  redacted Shoutrrr status/test (internal/notify, ADR 0007)
 //	GET  /sync/manifest, /sync/blob  state-sync wire (ADR 0001)
 package api
 
@@ -310,6 +312,40 @@ const Document = `{
         }
       }
     },
+    "/notify": {
+      "get": {
+        "operationId": "getNotifyStatus",
+        "summary": "Redacted notification status (enabled, channel count, last send outcome — never the URLs, ADR 0007)",
+        "responses": {
+          "200": {
+            "description": "Notification status",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/NotifyStatus" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/notify/test": {
+      "post": {
+        "operationId": "sendNotifyTest",
+        "summary": "Send one synchronous test notification (503 when unconfigured, 502 when delivery fails)",
+        "responses": {
+          "200": {
+            "description": "Test notification delivered",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/NotifyTest" }
+              }
+            }
+          },
+          "502": { "$ref": "#/components/responses/UpstreamError" },
+          "503": { "$ref": "#/components/responses/BadRequest" }
+        }
+      }
+    },
     "/sync/manifest": {
       "get": {
         "operationId": "getSyncManifest",
@@ -588,6 +624,25 @@ const Document = `{
           "healthy": { "type": "boolean" },
           "steps": { "type": "array", "items": { "$ref": "#/components/schemas/OnboardStep" } },
           "error": { "type": "string" }
+        }
+      },
+      "NotifyStatus": {
+        "type": "object",
+        "required": ["enabled", "channels"],
+        "properties": {
+          "enabled": { "type": "boolean" },
+          "channels": { "type": "integer" },
+          "last_event": { "type": "string" },
+          "last_at": { "type": "string" },
+          "last_error": { "type": "string" }
+        }
+      },
+      "NotifyTest": {
+        "type": "object",
+        "required": ["sent", "event"],
+        "properties": {
+          "sent": { "type": "boolean" },
+          "event": { "type": "string" }
         }
       },
       "ComposeFile": {

@@ -39,6 +39,12 @@ func fakePeer(t *testing.T) *httptest.Server {
 			FormatVersion: 1, Stack: r.PathValue("name"), Files: []string{"compose.yaml"}, Volumes: []api.VolumeDesc{{Name: "demo_data"}},
 		})
 	})
+	mux.HandleFunc("GET /notify", func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(api.NotifyStatus{Enabled: true, Channels: 2, LastEvent: "deploy.ok", LastAt: "2026-11-20T00:00:00Z"})
+	})
+	mux.HandleFunc("POST /notify/test", func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(api.NotifyTestResponse{Sent: true, Event: "notify.test"})
+	})
 	mux.HandleFunc("POST /stacks/missing/deploy", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNotFound)
 		_ = json.NewEncoder(w).Encode(api.ErrorResponse{Error: "stack not found"})
@@ -108,6 +114,40 @@ func TestDeploy(t *testing.T) {
 	var resp api.DeployResponse
 	if err := json.Unmarshal(out.Bytes(), &resp); err != nil || !resp.Healthy || resp.Stack != "demo" {
 		t.Errorf("json deploy = %+v, err %v", resp, err)
+	}
+}
+
+func TestNotify(t *testing.T) {
+	srv := fakePeer(t)
+	defer srv.Close()
+	var out bytes.Buffer
+	if err := run([]string{"--peer", srv.URL, "notify", "status"}, &out, &bytes.Buffer{}); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out.String(), "notifications enabled: 2 channel(s)") || !strings.Contains(out.String(), "deploy.ok") {
+		t.Errorf("notify status output = %q", out.String())
+	}
+	out.Reset()
+	if err := run([]string{"--peer", srv.URL, "--json", "notify", "status"}, &out, &bytes.Buffer{}); err != nil {
+		t.Fatal(err)
+	}
+	var st api.NotifyStatus
+	if err := json.Unmarshal(out.Bytes(), &st); err != nil || !st.Enabled || st.Channels != 2 {
+		t.Errorf("json notify status = %+v, err %v", st, err)
+	}
+	out.Reset()
+	if err := run([]string{"--peer", srv.URL, "notify", "test"}, &out, &bytes.Buffer{}); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out.String(), "test notification sent") {
+		t.Errorf("notify test output = %q", out.String())
+	}
+	out.Reset()
+	if err := run([]string{"--peer", srv.URL, "notify", "bogus"}, &out, &bytes.Buffer{}); err == nil {
+		t.Error("notify bogus should fail")
+	}
+	if err := run([]string{"--peer", srv.URL, "notify"}, &out, &bytes.Buffer{}); err == nil {
+		t.Error("notify without subcommand should fail")
 	}
 }
 

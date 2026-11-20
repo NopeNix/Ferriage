@@ -167,3 +167,21 @@ type OnboardResponse struct {
 	Steps     []OnboardStep `json:"steps"`
 	Error     string        `json:"error,omitempty"`
 }
+
+// NotifyStatus is the body of GET /notify (ADR 0007). Redacted
+// by design: it reports whether notifications are configured and
+// the outcome of the last send, never the URLs themselves (they
+// are secrets and enter only via FERRIAGE_NOTIFY_URLS).
+type NotifyStatus struct {
+	Enabled   bool   `json:"enabled"`
+	Channels  int    `json:"channels"`
+	LastEvent string `json:"last_event,omitempty"`
+	LastAt    string `json:"last_at,omitempty"`
+	LastErr   string `json:"last_error,omitempty"`
+}
+
+// NotifyTestResponse is the body of POST /notify/test.
+type NotifyTestResponse struct {
+	Sent  bool   `json:"sent"`
+	Event string `json:"event"`
+}

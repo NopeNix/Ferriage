@@ -20,6 +20,7 @@ import (
 	"github.com/NopeNix/Ferriage/internal/health"
 	"github.com/NopeNix/Ferriage/internal/identity"
 	"github.com/NopeNix/Ferriage/internal/logs"
+	"github.com/NopeNix/Ferriage/internal/notify"
 	"github.com/NopeNix/Ferriage/internal/onboard"
 	"github.com/NopeNix/Ferriage/internal/snapshot"
 	"github.com/NopeNix/Ferriage/internal/stacks"
@@ -79,13 +80,21 @@ func main() {
 	mux.Handle("/stacks", stacks.NewHandler())
 	mux.Handle("/", sync.NewHandler(store, idn.ID()))
 	snapshot.Register(mux, stateDir, idn.ID())
-	deploy.Register(mux, stateDir)
+	// Notifications (ADR 0007, option A): Shoutrrr URLs from
+	// FERRIAGE_NOTIFY_URLS only; a nil/disabled notifier is a
+	// no-op, so handlers stay unconditional.
+	notifier, _ := notify.New(notify.URLsFromEnv(), idn.ID)
+	if notifier.Enabled() {
+		log.Printf("ferriage notify: %d channel(s) enabled (FERRIAGE_NOTIFY_URLS)", notifier.Channels())
+	}
+	deploy.Register(mux, stateDir, notifier)
 	logs.Register(mux)
 	stats.Register(mux)
 	exec.Register(mux)
 	compose.Register(mux, stateDir)
 	console.Register(mux)
-	onboard.Register(mux, stateDir, selfURL)
+	onboard.Register(mux, stateDir, selfURL, notifier)
+	notify.Register(mux, notifier)
 
 	srv := &http.Server{
 		Addr:              addr,

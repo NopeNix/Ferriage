@@ -5,6 +5,7 @@ import type { Peer, Stack } from "./api/types";
 import { StackCard } from "./components/StackCard";
 import { StackDetail } from "./components/StackDetail";
 import { OnboardHost } from "./components/OnboardHost";
+import { NotifyStatus } from "./components/NotifyStatus";
 import { Badge } from "./components/ui/badge";
 import { Button } from "./components/ui/button";
 
@@ -91,9 +92,14 @@ export default function App() {
               {state.stacks.length} stack{state.stacks.length === 1 ? "" : "s"} adopted
             </p>
             {!selected && (
-              <div className="mb-8">
-                <OnboardHost />
-              </div>
+              <>
+                <div className="mb-8">
+                  <OnboardHost />
+                </div>
+                <div className="mb-8">
+                  <NotifyStatus />
+                </div>
+              </>
             )}
             {selected ? (
               <StackDetail stack={selected} onBack={() => setSelected(null)} onChanged={() => void load()} />

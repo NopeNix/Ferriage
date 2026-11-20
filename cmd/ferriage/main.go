@@ -14,6 +14,8 @@
 // ferriage [--peer URL] [--json] stats <stack>
 // ferriage [--peer URL] [--json] exec <stack> <service> -- <cmd...>
 // ferriage [--peer URL] [--json] onboard <address> --key <file> [--user U] [--image IMG] [--peer-url URL] [--port N]
+// ferriage [--peer URL] [--json] notify status
+// ferriage [--peer URL] [--json] notify test
 // ferriage version
 //
 // The peer defaults to $FERRIAGE_PEER, else http://localhost:8080.
@@ -51,6 +53,8 @@ Usage:
   ferriage [--peer URL] [--json] stats <stack>
   ferriage [--peer URL] [--json] exec <stack> <service> -- <cmd...>
   ferriage [--peer URL] [--json] onboard <address> --key <file> [--user U] [--image IMG] [--peer-url URL] [--port N]
+  ferriage [--peer URL] [--json] notify status
+  ferriage [--peer URL] [--json] notify test
   ferriage version
   ferriage help
 
@@ -267,6 +271,45 @@ func run(args []string, stdout, stderr io.Writer) error {
 			_, _ = fmt.Fprintln(stdout, "(output truncated)")
 		}
 		return nil
+	case "notify":
+		if len(argv) < 1 {
+			return usageErr("notify needs a subcommand: status | test")
+		}
+		switch argv[0] {
+		case "status":
+			var resp api.NotifyStatus
+			if err := c.get("/notify", &resp); err != nil {
+				return err
+			}
+			if opts.json {
+				return writeJSON(stdout, &resp)
+			}
+			if !resp.Enabled {
+				_, _ = fmt.Fprintln(stdout, "notifications disabled (set FERRIAGE_NOTIFY_URLS on the peer)")
+				return nil
+			}
+			_, _ = fmt.Fprintf(stdout, "notifications enabled: %d channel(s)\n", resp.Channels)
+			if resp.LastEvent != "" {
+				_, _ = fmt.Fprintf(stdout, "last event: %s at %s", resp.LastEvent, resp.LastAt)
+				if resp.LastErr != "" {
+					_, _ = fmt.Fprintf(stdout, " (error: %s)", resp.LastErr)
+				}
+				_, _ = fmt.Fprintln(stdout)
+			}
+			return nil
+		case "test":
+			var resp api.NotifyTestResponse
+			if err := c.postJSON("/notify/test", nil, &resp); err != nil {
+				return err
+			}
+			if opts.json {
+				return writeJSON(stdout, &resp)
+			}
+			_, _ = fmt.Fprintf(stdout, "test notification sent (%s)\n", resp.Event)
+			return nil
+		default:
+			return usageErr("notify: unknown subcommand %q (status | test)", argv[0])
+		}
 	case "onboard":
 		if len(argv) < 1 {
 			return usageErr("onboard needs an address (host or host:port)")

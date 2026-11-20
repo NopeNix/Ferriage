@@ -5,11 +5,13 @@ import (
 	"net/http"
 
 	"github.com/NopeNix/Ferriage/internal/api"
+	"github.com/NopeNix/Ferriage/internal/notify"
 )
 
 // Register serves POST /hosts/onboard on the peer mux.
-func Register(mux *http.ServeMux, stateDir string, selfURL string) {
-	h := &Handler{StateDir: stateDir, SelfURL: selfURL}
+// n may be nil (notifications disabled).
+func Register(mux *http.ServeMux, stateDir string, selfURL string, n *notify.Notifier) {
+	h := &Handler{StateDir: stateDir, SelfURL: selfURL, Notifier: n}
 	mux.HandleFunc("POST /hosts/onboard", h.onboard)
 }
 
@@ -18,7 +20,8 @@ type Handler struct {
 	StateDir string
 	// SelfURL is the URL the new peer pulls mesh state from
 	// (this peer's own address as reachable from the new host).
-	SelfURL string
+	SelfURL  string
+	Notifier *notify.Notifier
 }
 
 func (h *Handler) onboard(w http.ResponseWriter, r *http.Request) {
@@ -32,6 +35,16 @@ func (h *Handler) onboard(w http.ResponseWriter, r *http.Request) {
 		req.PeerURL = h.SelfURL
 	}
 	res, err := Onboard(r.Context(), &req, h.StateDir, nil, nil)
+	// Best-effort notification (ADR 0007): never blocks or
+	// fails onboarding; a nil Notifier is a no-op.
+	subject := req.Address
+	if err != nil {
+		h.Notifier.Notify(r.Context(), notify.EventOnboardFailed, subject, err.Error())
+	} else if res != nil && res.Healthy {
+		h.Notifier.Notify(r.Context(), notify.EventOnboardOK, subject, "healthy")
+	} else if res != nil {
+		h.Notifier.Notify(r.Context(), notify.EventOnboardFailed, subject, "not healthy")
+	}
 	if err != nil {
 		status := http.StatusInternalServerError
 		if e, ok := err.(*Error); ok && e.Code == "bad_request" {

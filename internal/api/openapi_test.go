@@ -73,6 +73,8 @@ func TestSchemasMatchGoStructs(t *testing.T) {
 		{"OnboardRequest", reflect.TypeOf(OnboardRequest{})},
 		{"OnboardStep", reflect.TypeOf(OnboardStep{})},
 		{"OnboardResponse", reflect.TypeOf(OnboardResponse{})},
+		{"NotifyStatus", reflect.TypeOf(NotifyStatus{})},
+		{"NotifyTest", reflect.TypeOf(NotifyTestResponse{})},
 	}
 	for _, tc := range cases {
 		s, ok := schemas[tc.name]

@@ -30,6 +30,11 @@ services:
       # Comma-separated list of other peers to sync from. Empty = no sync.
       FERRIAGE_PEER: ${FERRIAGE_PEER:-}
       FERRIAGE_SYNC_INTERVAL: ${FERRIAGE_SYNC_INTERVAL:-30s}
+      # Shoutrrr notification URLs (comma-separated, ADR 0007).
+      # Empty = notifications disabled. These are secrets (webhook
+      # tokens, SMTP creds) — they arrive only via env and never
+      # cross the peer API, so keep them out of committed files.
+      FERRIAGE_NOTIFY_URLS: ${FERRIAGE_NOTIFY_URLS:-}
     volumes:
       # State lives on disk, never in a database (AGENTS.md §3).
       - ferriage_state:/stacks

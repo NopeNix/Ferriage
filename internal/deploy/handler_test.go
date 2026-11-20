@@ -11,7 +11,7 @@ import (
 
 func TestDeployMissingStack(t *testing.T) {
 	mux := http.NewServeMux()
-	Register(mux, t.TempDir())
+	Register(mux, t.TempDir(), nil)
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
 

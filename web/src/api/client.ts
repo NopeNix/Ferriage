@@ -1,4 +1,4 @@
-import type { ComposeFile, DeployResult, Error as ApiError, ExecResult, Logs, OnboardResponse, Peer, SnapshotManifest, Stacks, Stats } from "./types";
+import type { ComposeFile, DeployResult, Error as ApiError, ExecResult, Logs, NotifyStatus, NotifyTest, OnboardResponse, Peer, SnapshotManifest, Stacks, Stats } from "./types";
 
 // The UI talks to the BFF at /api/*, which proxies to the peer.
 // The peer API is typed by the OpenAPI contract served at
@@ -155,5 +155,21 @@ export const api = {
       throw new Error(`/hosts/onboard: ${res.status} ${body?.error ?? res.statusText}`);
     }
     return (await res.json()) as OnboardResponse;
+  },
+  // Shoutrrr notifications (ADR 0007): redacted status + test.
+  // URLs are env-only on the peer and never cross the API.
+  notifyStatus: () => request<NotifyStatus>("GET", "/notify"),
+  notifyTest: async (): Promise<NotifyTest> => {
+    const session = await getSession();
+    if (!session) throw new Error(`/notify/test: 401 Unauthorized`);
+    const res = await fetch(`/api/notify/test`, {
+      method: "POST",
+      headers: { "x-csrf-token": session.csrf },
+    });
+    if (!res.ok) {
+      const body = (await res.json().catch(() => null)) as ApiError | null;
+      throw new Error(`/notify/test: ${res.status} ${body?.error ?? res.statusText}`);
+    }
+    return (await res.json()) as NotifyTest;
   },
 };

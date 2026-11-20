@@ -8,11 +8,13 @@ import (
 	"time"
 
 	"github.com/NopeNix/Ferriage/internal/api"
+	"github.com/NopeNix/Ferriage/internal/notify"
 )
 
 // Register serves POST /stacks/{name}/deploy on the peer mux.
-func Register(mux *http.ServeMux, stateDir string) {
-	h := &Handler{StateDir: stateDir, Cfg: DefaultConfig()}
+// n may be nil (notifications disabled); Notify is a no-op then.
+func Register(mux *http.ServeMux, stateDir string, n *notify.Notifier) {
+	h := &Handler{StateDir: stateDir, Cfg: DefaultConfig(), Notifier: n}
 	mux.HandleFunc("POST /stacks/{name}/deploy", h.deploy)
 }
 
@@ -20,6 +22,7 @@ func Register(mux *http.ServeMux, stateDir string) {
 type Handler struct {
 	StateDir string
 	Cfg      Config
+	Notifier *notify.Notifier
 }
 
 func (h *Handler) deploy(w http.ResponseWriter, r *http.Request) {
@@ -42,6 +45,15 @@ func (h *Handler) deploy(w http.ResponseWriter, r *http.Request) {
 		cfg.Timeout = 120 * time.Second
 	}
 	res, err := Deploy(r.Context(), stackDir, cfg)
+	// Best-effort notification (ADR 0007): never blocks or
+	// fails the deploy; a nil Notifier is a no-op.
+	if err != nil {
+		h.Notifier.Notify(r.Context(), notify.EventDeployFailed, name, err.Error())
+	} else if res != nil && res.Healthy {
+		h.Notifier.Notify(r.Context(), notify.EventDeployOK, name, "healthy")
+	} else if res != nil {
+		h.Notifier.Notify(r.Context(), notify.EventDeployFailed, name, res.Detail)
+	}
 	if err != nil {
 		if res != nil {
 			w.Header().Set("Content-Type", "application/json")

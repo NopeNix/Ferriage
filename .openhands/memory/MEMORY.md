@@ -20,3 +20,4 @@
 | 2026-11-20 | [012-phase3-api-cli](log/2026-11-20-012-phase3-api-cli.md) | phase3 | typed API (internal/api + OpenAPI + drift test), cmd/ferriage CLI twin, StackDetail; full routine 29/0 |
 | 2026-11-20 | [013-phase3-logs-stats-exec](log/2026-11-20-013-phase3-logs-stats-exec.md) | phase3 | ADR 0005: logs/stats/exec + WS console (hand-rolled RFC6455) + Monaco vendored offline + BFF raw upgrade pipe; errdefs deprecation; full routine 40/0 |
 | 2026-11-20 | [014-phase3-ssh-onboarding](log/2026-11-20-014-phase3-ssh-onboarding.md) | phase3 | ADR 0006: native x/crypto/ssh, TO-FU store (missing/empty ≠ pinned), pull_policy missing; full routine 40/0 |
+| 2026-11-20 | [015-phase3-shoutrrr](log/2026-11-20-015-phase3-shoutrrr.md) | phase3 | ADR 0007: Shoutrrr env-only (FERRIAGE_NOTIFY_URLS), async best-effort (never inherit request ctx), redacted GET /notify; full routine 40/0 |

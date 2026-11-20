@@ -146,6 +146,19 @@ export interface Logs {
   truncated: boolean;
 }
 
+export interface NotifyStatus {
+  enabled: boolean;
+  channels: number;
+  last_event?: string;
+  last_at?: string;
+  last_error?: string;
+}
+
+export interface NotifyTest {
+  sent: boolean;
+  event: string;
+}
+
 export interface OnboardRequest {
   address: string;
   user?: string;
