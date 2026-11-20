@@ -82,17 +82,241 @@ else
 fi
 
 # ---- Layer 2: compose smoke (first-milestone flow) ---------------------
+# The milestone flow: build the peer image (deploy/), start two peer
+# containers against one daemon, write a stack dir on B, verify it
+# syncs to A (sync is pull-based, ADR 0001: A pulls FROM B), adopt it,
+# export with its volume, restore on A, deploy health-gated, and
+# verify the volume data survived the move.
+#
+# Isolation: peer state lives in per-run tmp dirs; the test stack name
+# and its volume are unique per run (marker file + random suffix), so
+# reruns and other compose projects on the same daemon are untouched.
 if [ "$SKIP_CONTAINER" -eq 0 ]; then
     log "Layer 2: compose smoke (2 peers, sync, adopt, move with volume)"
     if [ ! -f go.mod ]; then
         skip "no peer binary yet — compose smoke skipped"
     elif [ ! -f deploy/docker-compose.yml ]; then
         skip "no deploy/docker-compose.yml yet — compose smoke skipped"
+    elif ! command -v docker >/dev/null 2>&1; then
+        skip "docker not installed — compose smoke skipped"
     else
-        # TODO(first milestone): build peer image, run two containers,
-        # verify state sync, adopt a test stack, move it WITH its
-        # volume via export/import. Fail loudly until implemented.
-        bad "compose smoke not implemented yet (first milestone)"
+        set +e
+        SMOKE_TMP=""
+        PEER_A=""; PEER_B=""; TEST_STACK=""; TEST_VOL=""; TEST_MARKER=""
+        cleanup_smoke() {
+            # Test stack containers/volumes first, then peers, then dirs.
+            [ -n "$TEST_STACK" ] && docker compose -p "$TEST_STACK" -f "$SMOKE_TMP/stack/compose.yaml" down -v --remove-orphans >/dev/null 2>&1
+            [ -n "$PEER_A" ] && docker rm -f "$PEER_A" >/dev/null 2>&1
+            [ -n "$PEER_B" ] && docker rm -f "$PEER_B" >/dev/null 2>&1
+            [ -n "$TEST_VOL" ] && docker volume rm -f "$TEST_VOL" >/dev/null 2>&1
+            if [ -n "$SMOKE_TMP" ] && [ -d "$SMOKE_TMP" ]; then
+                # Peer containers run as root: their state dirs are
+                # root-owned, so the operator's rm cannot remove them.
+                # A throwaway root container does the removal, then the
+                # empty dir itself goes away with a normal rmdir.
+                docker run --rm --user root -v "$SMOKE_TMP:/smoke" alpine:3.20 sh -c 'rm -rf /smoke/a /smoke/b /smoke/stack /smoke/*.json /smoke/*.tar.gz /smoke/*.log /smoke/*.id' >/dev/null 2>&1
+                rm -rf "$SMOKE_TMP" 2>/dev/null || rmdir "$SMOKE_TMP" 2>/dev/null
+            fi
+        }
+        SMOKE_TMP="$(mktemp -d /tmp/ferriage-smoke.XXXXXX)" || { bad "compose smoke: mktemp failed"; SMOKE_TMP=""; }
+        SUFFIX="$(head -c4 /dev/urandom | od -An -tx1 | tr -d ' \n')"
+        TEST_STACK="ferriage-smoke-$SUFFIX"
+        TEST_VOL="${TEST_STACK}_data"
+        TEST_MARKER="hello-volume-$SUFFIX"
+        PEER_A="ferriage-smoke-a-$SUFFIX"
+        PEER_B="ferriage-smoke-b-$SUFFIX"
+
+        echo "  building peer image (deploy/Dockerfile)..."
+        if docker build -f deploy/Dockerfile -t ferriage:smoke . >"$SMOKE_TMP/build.log" 2>&1; then
+            ok "layer2: image build (deploy/Dockerfile)"
+        else
+            bad "layer2: image build (see $SMOKE_TMP/build.log; kept on failure cleanup)"
+            tail -n 20 "$SMOKE_TMP/build.log"
+            cleanup_smoke; SMOKE_TMP=""
+        fi
+
+        if [ -n "$SMOKE_TMP" ]; then
+            mkdir -p "$SMOKE_TMP/a" "$SMOKE_TMP/b"
+
+            # Peer B starts first (A will pull from it via FERRIAGE_PEER).
+            # Both peers run on --network host: A's pull of B is just
+            # localhost:18081, no NAT/port-publish/host-gateway to
+            # reason about, and a stop/start keeps the same address.
+            echo "  starting peer B..."
+            docker run -d --name "$PEER_B" \
+                --network host \
+                -e FERRIAGE_ADDR=:18081 \
+                -e FERRIAGE_STATE_DIR=/stacks \
+                -e FERRIAGE_SYNC_INTERVAL=500ms \
+                -v "$SMOKE_TMP/b:/stacks" \
+                -v /var/run/docker.sock:/var/run/docker.sock \
+                ferriage:smoke >"$SMOKE_TMP/b.id" 2>&1 || cleanup_smoke
+            B_PORT=18081
+            echo "  starting peer A (FERRIAGE_PEER=http://localhost:18081)..."
+            docker run -d --name "$PEER_A" \
+                --network host \
+                -e FERRIAGE_ADDR=:18080 \
+                -e FERRIAGE_PEER="http://localhost:18081" \
+                -e FERRIAGE_SYNC_INTERVAL=500ms \
+                -v "$SMOKE_TMP/a:/stacks" \
+                -v /var/run/docker.sock:/var/run/docker.sock \
+                ferriage:smoke >"$SMOKE_TMP/a.id" 2>&1 || cleanup_smoke
+
+            # Wait for health on both.
+            A_PORT=18080
+            wait_healthy() {
+                local name="$1" port="$2" i
+                for i in $(seq 1 30); do
+                    curl -fsS "http://127.0.0.1:$port/healthz" >/dev/null 2>&1 && return 0
+                    sleep 0.5
+                done
+                echo "  peer $name not healthy; logs:"; docker logs "$name" 2>&1 | tail -n 20
+                return 1
+            }
+            if wait_healthy "$PEER_A" "$A_PORT" && wait_healthy "$PEER_B" "$B_PORT"; then
+                ok "layer2: two peers healthy"
+            else
+                bad "layer2: peers not healthy"
+            fi
+
+            # --- write a stack dir on B, deploy via B ----------------
+            # Sync is pull-based (ADR 0001): A pulls FROM B
+            # (FERRIAGE_PEER), never the reverse. So the stack dir is
+            # written on B, deployed on B, and verified to sync B->A.
+            mkdir -p "$SMOKE_TMP/stack"
+            cat >"$SMOKE_TMP/stack/compose.yaml" <<YAML
+services:
+  app:
+    image: alpine:3.20
+    command: ["sh", "-c", "mkdir -p /data && echo $TEST_MARKER > /data/marker.txt && sleep 1000"]
+    volumes:
+      - data:/data
+    healthcheck:
+      test: ["CMD", "sh", "-c", "test -f /data/marker.txt"]
+      interval: 2s
+      timeout: 3s
+      retries: 5
+      start_period: 2s
+volumes:
+  data:
+YAML
+            mkdir -p "$SMOKE_TMP/b/$TEST_STACK"
+            cp "$SMOKE_TMP/stack/compose.yaml" "$SMOKE_TMP/b/$TEST_STACK/compose.yaml"
+            # Deploy via the peer API (compose CLI + health gate).
+            if curl -sS -X POST "http://127.0.0.1:$B_PORT/stacks/$TEST_STACK/deploy" \
+                    --max-time 120 >"$SMOKE_TMP/deploy.json" 2>&1 && grep -q '"healthy":true' "$SMOKE_TMP/deploy.json"; then
+                ok "layer2: health-gated deploy on B"
+            else
+                bad "layer2: deploy on B did not report healthy"; cat "$SMOKE_TMP/deploy.json"
+            fi
+            # Volume data landed?
+            if docker run --rm -v "$TEST_VOL:/vol" alpine:3.20 cat /vol/marker.txt 2>/dev/null | grep -q "$TEST_MARKER"; then
+                ok "layer2: volume data written ($TEST_MARKER)"
+            else
+                bad "layer2: volume marker missing after deploy"
+            fi
+
+            # --- sync: B's stack dir appears on A -------------------
+            SYNCED=0
+            for i in $(seq 1 30); do
+                if [ -f "$SMOKE_TMP/a/$TEST_STACK/compose.yaml" ]; then SYNCED=1; break; fi
+                sleep 0.5
+            done
+            if [ "$SYNCED" -eq 1 ]; then
+                ok "layer2: state dir sync B->A (file appeared)"
+            else
+                bad "layer2: sync B->A (no $TEST_STACK/compose.yaml on A)"
+                echo "  -- A peer logs --"; docker logs "$PEER_A" 2>&1 | tail -n 5
+                echo "  -- B manifest --"; curl -fsS "http://127.0.0.1:$B_PORT/sync/manifest" 2>&1 | head -c 400; echo
+                echo "  -- A state dir --"; ls -R "$SMOKE_TMP/a" 2>&1 | head -n 20
+                echo "  -- A->B reachability from inside A --"
+                docker exec "$PEER_A" wget -qO- "http://127.0.0.1:$B_PORT/healthz" 2>&1 | head -c 200; echo
+            fi
+            # A serves a manifest containing our stack's compose file.
+            if curl -fsS "http://127.0.0.1:$A_PORT/sync/manifest" 2>/dev/null | grep -q "$TEST_STACK/compose.yaml"; then
+                ok "layer2: A manifest lists the synced file"
+            else
+                bad "layer2: A manifest missing synced file"
+            fi
+
+            # --- adopt: GET /stacks sees the running stack ----------
+            if curl -fsS "http://127.0.0.1:$B_PORT/stacks" 2>/dev/null | grep -q "\"name\":\"$TEST_STACK\""; then
+                ok "layer2: adopted by labels (GET /stacks)"
+            else
+                bad "layer2: adopt — $TEST_STACK absent from GET /stacks"
+            fi
+
+            # --- move: export on B, import on A, deploy on A --------
+            # The stack name is the same on both peers (same daemon, so
+            # the same project/volume names). Import refuses existing
+            # stack dirs/volumes, so: drop B's containers+volume via
+            # compose down -v, remove the synced copy on A, then import.
+            if curl -sS -X POST "http://127.0.0.1:$B_PORT/stacks/$TEST_STACK/export" \
+                    --max-time 60 -o "$SMOKE_TMP/$TEST_STACK.tar.gz" 2>&1 && [ -s "$SMOKE_TMP/$TEST_STACK.tar.gz" ]; then
+                ok "layer2: snapshot export (gzip+tar, with volume)"
+            else
+                bad "layer2: snapshot export failed"
+            fi
+            if [ -s "$SMOKE_TMP/$TEST_STACK.tar.gz" ]; then
+                # The move needs B GONE for its duration. Import
+                # refuses an existing stack dir, and A is a sync slave
+                # of B (pull-based, ADR 0001): deleting a/<stack>
+                # while B runs just gets it re-synced within one 500ms
+                # tick — the tombstone only guards against STALE peers,
+                # and B is still live-selling this file. Nothing to
+                # race but the order: down B's containers+volume,
+                # delete B's stack dir too (so its manifest can't
+                # re-sell anything), stop both, remove the synced copy
+                # on A, start ONLY A, import, deploy, then restart B
+                # and verify A-B sync STILL converges on the new file.
+                docker compose -p "$TEST_STACK" -f "$SMOKE_TMP/stack/compose.yaml" down -v --remove-orphans >/dev/null 2>&1
+                docker run --rm --user root -v "$SMOKE_TMP:/smoke" alpine:3.20 sh -c "rm -rf /smoke/b/$TEST_STACK" >/dev/null 2>&1
+                docker stop "$PEER_A" "$PEER_B" >/dev/null 2>&1
+                # The synced copy on A is root-owned (peer runs as
+                # root): remove it via a throwaway root container.
+                docker run --rm --user root -v "$SMOKE_TMP:/smoke" alpine:3.20 sh -c "rm -rf /smoke/a/$TEST_STACK" >/dev/null 2>&1
+                docker start "$PEER_A" >/dev/null 2>&1
+                wait_healthy "$PEER_A" "$A_PORT"
+                if curl -sS -X POST "http://127.0.0.1:$A_PORT/stacks/$TEST_STACK/import" \
+                        --data-binary @"$SMOKE_TMP/$TEST_STACK.tar.gz" \
+                        --max-time 60 >"$SMOKE_TMP/import.json" 2>&1 && grep -q "\"stack\":\"$TEST_STACK\"" "$SMOKE_TMP/import.json"; then
+                    ok "layer2: snapshot import on A"
+                else
+                    bad "layer2: snapshot import on A"; cat "$SMOKE_TMP/import.json"
+                fi
+                if curl -sS -X POST "http://127.0.0.1:$A_PORT/stacks/$TEST_STACK/deploy" \
+                        --max-time 120 >"$SMOKE_TMP/deploy2.json" 2>&1 && grep -q '"healthy":true' "$SMOKE_TMP/deploy2.json"; then
+                    ok "layer2: health-gated deploy on A after restore"
+                else
+                    bad "layer2: deploy on A after restore"; cat "$SMOKE_TMP/deploy2.json"
+                fi
+                if docker run --rm -v "$TEST_VOL:/vol" alpine:3.20 cat /vol/marker.txt 2>/dev/null | grep -q "$TEST_MARKER"; then
+                    ok "layer2: VOLUME DATA SURVIVED THE MOVE ($TEST_MARKER)"
+                else
+                    bad "layer2: volume data lost in the move"
+                fi
+                # B returns. B has no FERRIAGE_PEER (sync is
+                # pull-only, ADR 0001), so B manifests only its own
+                # state dir — which was removed during the move. What
+                # MUST hold: A's stack survives B's empty manifest.
+                # A's ledger knows the file as a synced copy from B,
+                # but the delete rule keeps it: the file was restored
+                # after the last pull, so it is newer than the ledger
+                # entry (a "user edit" the delete path must not kill).
+                docker start "$PEER_B" >/dev/null 2>&1
+                wait_healthy "$PEER_B" "$B_PORT"
+                sleep 2
+                if curl -fsS "http://127.0.0.1:$A_PORT/sync/manifest" 2>/dev/null | grep -q "$TEST_STACK/compose.yaml" && [ -f "$SMOKE_TMP/a/$TEST_STACK/compose.yaml" ]; then
+                    ok "layer2: moved stack survives B's empty manifest (no delete heals back)"
+                else
+                    bad "layer2: moved stack deleted after B returned"
+                fi
+            fi
+
+            cleanup_smoke
+            SMOKE_TMP=""
+        fi
+        set -e
     fi
 fi
 

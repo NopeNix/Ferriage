@@ -1,0 +1,49 @@
+# Ferriage itself — one peer, one container, one state dir (Phase 1.6).
+#
+# Every node runs this file. State is files: the /stacks volume, holding
+# one subdirectory per stack (Compose files = source of truth, CONCEPT).
+# The peer talks to the host Docker daemon through the bind-mounted
+# socket: adopting stacks, deploy's `docker compose up -d`, and volume
+# copy all go through it. That is by design (CONCEPT hard requirement 5:
+# privileged containers first-class; no orchestrator tax).
+#
+# Run on a host:
+#   docker compose -f deploy/docker-compose.yml up -d
+# Sync peers into each other with FERRIAGE_PEER (comma-separated peer
+# URLs, e.g. http://10.0.0.1:8080). The mesh is plain HTTP pull in
+# Phase 1; Iroh is Phase 4 territory (see docs/architecture.md).
+#
+# Image: nopenix/ferriage (Docker Hub). Build locally with
+# `docker compose -f deploy/docker-compose.yml up -d --build`.
+
+services:
+  peer:
+    image: nopenix/ferriage:${FERRIAGE_TAG:-latest}
+    pull_policy: missing
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    restart: unless-stopped
+    environment:
+      # State dir inside the container; the peer binary defaults agree.
+      FERRIAGE_STATE_DIR: /stacks
+      # Comma-separated list of other peers to sync from. Empty = no sync.
+      FERRIAGE_PEER: ${FERRIAGE_PEER:-}
+      FERRIAGE_SYNC_INTERVAL: ${FERRIAGE_SYNC_INTERVAL:-30s}
+    volumes:
+      # State lives on disk, never in a database (AGENTS.md §3).
+      - ferriage_state:/stacks
+      # The daemon socket: how the peer adopts, deploys, and moves volumes.
+      - /var/run/docker.sock:/var/run/docker.sock
+    ports:
+      - "${FERRIAGE_PORT:-8080}:8080"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8080/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+volumes:
+  ferriage_state:
+    name: ferriage_state

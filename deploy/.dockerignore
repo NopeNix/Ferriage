@@ -1,0 +1,24 @@
+# The image build context is the repo root (see deploy/Dockerfile).
+# Keep local state, secrets, and tooling out of it.
+.git/
+.openhands/
+tmp/
+data/
+/stacks/
+volumes/
+snapshots/
+*.db
+*.db-wal
+*.db-shm
+.env
+.env.*
+*.key
+*.pem
+secrets/
+.idea/
+.vscode/
+*.swp
+.DS_Store
+tests/baselines/*.new.png
+test-results/
+playwright-report/
