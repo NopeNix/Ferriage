@@ -75,7 +75,7 @@ its volume, healthy on arrival. Record host + URL in `HANDOVER.md`.
 2. **Logs / stats / exec** — stream, stats, container console,
    Monaco editor (compose schema autocomplete + validation + diff) ✓ 2026-11-20 (ADR 0005)
 3. **SSH onboarding** — zero-touch: address + key → Docker check →
-   one Ferriage container (confirm before non-dev hosts)
+   one Ferriage container (confirm before non-dev hosts) ✓ 2026-11-20 (ADR 0006)
 4. **Notifications** — Shoutrrr (built-in channel)
 5. **Audit log** — who did what, when
 6. **Auto-update** — per-node digest poll, `poll` vs `auto` policy,

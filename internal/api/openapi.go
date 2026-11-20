@@ -284,6 +284,32 @@ const Document = `{
         }
       }
     },
+    "/hosts/onboard": {
+      "post": {
+        "operationId": "onboardHost",
+        "summary": "Zero-touch SSH onboarding: address + key, Docker check, one Ferriage container (ADR 0006)",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/OnboardRequest" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Onboarded and healthy",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/OnboardResponse" }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "502": { "$ref": "#/components/responses/UpstreamError" }
+        }
+      }
+    },
     "/sync/manifest": {
       "get": {
         "operationId": "getSyncManifest",
@@ -527,6 +553,41 @@ const Document = `{
           "exit_code": { "type": "integer" },
           "output": { "type": "string" },
           "truncated": { "type": "boolean" }
+        }
+      },
+      "OnboardRequest": {
+        "type": "object",
+        "required": ["address", "private_key"],
+        "properties": {
+          "address": { "type": "string" },
+          "user": { "type": "string" },
+          "private_key": { "type": "string" },
+          "image": { "type": "string" },
+          "peer_url": { "type": "string" },
+          "port": { "type": "integer" }
+        }
+      },
+      "OnboardStep": {
+        "type": "object",
+        "required": ["name", "ok"],
+        "properties": {
+          "name": { "type": "string" },
+          "ok": { "type": "boolean" },
+          "detail": { "type": "string" }
+        }
+      },
+      "OnboardResponse": {
+        "type": "object",
+        "required": ["address", "docker", "compose", "container", "peer_url", "healthy", "steps"],
+        "properties": {
+          "address": { "type": "string" },
+          "docker": { "type": "string" },
+          "compose": { "type": "string" },
+          "container": { "type": "string" },
+          "peer_url": { "type": "string" },
+          "healthy": { "type": "boolean" },
+          "steps": { "type": "array", "items": { "$ref": "#/components/schemas/OnboardStep" } },
+          "error": { "type": "string" }
         }
       },
       "ComposeFile": {

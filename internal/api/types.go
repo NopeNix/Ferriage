@@ -134,3 +134,36 @@ type ComposeResponse struct {
 type ComposeSaveRequest struct {
 	Content string `json:"content"`
 }
+
+// OnboardRequest is the body of POST /hosts/onboard (ADR 0006).
+// Key-only auth: the private key is passed in the body and kept
+// in memory for one SSH connection only.
+type OnboardRequest struct {
+	Address    string `json:"address"`
+	User       string `json:"user,omitempty"`
+	PrivateKey string `json:"private_key"`
+	Image      string `json:"image,omitempty"`
+	PeerURL    string `json:"peer_url,omitempty"`
+	Port       int    `json:"port,omitempty"`
+}
+
+// OnboardStep is one onboarding phase (ssh, docker-check, ...).
+type OnboardStep struct {
+	Name   string `json:"name"`
+	OK     bool   `json:"ok"`
+	Detail string `json:"detail,omitempty"`
+}
+
+// OnboardResponse is the body of POST /hosts/onboard. On failure
+// the peer still returns HTTP 502 with the partial result and a
+// non-empty Error, so the UI can show how far onboarding got.
+type OnboardResponse struct {
+	Address   string        `json:"address"`
+	Docker    string        `json:"docker"`
+	Compose   string        `json:"compose"`
+	Container string        `json:"container"`
+	PeerURL   string        `json:"peer_url"`
+	Healthy   bool          `json:"healthy"`
+	Steps     []OnboardStep `json:"steps"`
+	Error     string        `json:"error,omitempty"`
+}

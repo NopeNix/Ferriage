@@ -83,6 +83,23 @@ export interface SyncManifest {
   entries: SyncEntry[];
 }
 
+export interface OnboardStep {
+  name: string;
+  ok: boolean;
+  detail?: string;
+}
+
+export interface OnboardResponse {
+  address: string;
+  docker: string;
+  compose: string;
+  container: string;
+  peer_url: string;
+  healthy: boolean;
+  steps: OnboardStep[];
+  error?: string;
+}
+
 export interface ComposeFile {
   name: string;
   file: string;
@@ -127,6 +144,15 @@ export interface Logs {
   container: string;
   lines: LogLine[];
   truncated: boolean;
+}
+
+export interface OnboardRequest {
+  address: string;
+  user?: string;
+  private_key: string;
+  image?: string;
+  peer_url?: string;
+  port?: number;
 }
 
 export interface Stats {

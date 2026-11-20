@@ -20,6 +20,7 @@ import (
 	"github.com/NopeNix/Ferriage/internal/health"
 	"github.com/NopeNix/Ferriage/internal/identity"
 	"github.com/NopeNix/Ferriage/internal/logs"
+	"github.com/NopeNix/Ferriage/internal/onboard"
 	"github.com/NopeNix/Ferriage/internal/snapshot"
 	"github.com/NopeNix/Ferriage/internal/stacks"
 	"github.com/NopeNix/Ferriage/internal/state"
@@ -55,6 +56,12 @@ func main() {
 	}
 
 	peers := splitPeers(os.Getenv("FERRIAGE_PEER"))
+	// The URL new hosts pull mesh state from when they are
+	// onboarded through this peer (ADR 0001 pull, ADR 0006).
+	selfURL := os.Getenv("FERRIAGE_SELF_URL")
+	if selfURL == "" {
+		selfURL = "http://" + addr
+	}
 	syncInterval := 30 * time.Second
 	if v := os.Getenv("FERRIAGE_SYNC_INTERVAL"); v != "" {
 		if d, err := time.ParseDuration(v); err == nil && d > 0 {
@@ -78,6 +85,7 @@ func main() {
 	exec.Register(mux)
 	compose.Register(mux, stateDir)
 	console.Register(mux)
+	onboard.Register(mux, stateDir, selfURL)
 
 	srv := &http.Server{
 		Addr:              addr,

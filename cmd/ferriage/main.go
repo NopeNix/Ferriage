@@ -13,6 +13,7 @@
 // ferriage [--peer URL] [--json] logs <stack> <service> [--tail N]
 // ferriage [--peer URL] [--json] stats <stack>
 // ferriage [--peer URL] [--json] exec <stack> <service> -- <cmd...>
+// ferriage [--peer URL] [--json] onboard <address> --key <file> [--user U] [--image IMG] [--peer-url URL] [--port N]
 // ferriage version
 //
 // The peer defaults to $FERRIAGE_PEER, else http://localhost:8080.
@@ -49,6 +50,7 @@ Usage:
   ferriage [--peer URL] [--json] logs <stack> <service> [--tail N]
   ferriage [--peer URL] [--json] stats <stack>
   ferriage [--peer URL] [--json] exec <stack> <service> -- <cmd...>
+  ferriage [--peer URL] [--json] onboard <address> --key <file> [--user U] [--image IMG] [--peer-url URL] [--port N]
   ferriage version
   ferriage help
 
@@ -265,6 +267,97 @@ func run(args []string, stdout, stderr io.Writer) error {
 			_, _ = fmt.Fprintln(stdout, "(output truncated)")
 		}
 		return nil
+	case "onboard":
+		if len(argv) < 1 {
+			return usageErr("onboard needs an address (host or host:port)")
+		}
+		reqBody := api.OnboardRequest{Address: argv[0]}
+		keyFile := ""
+		for i := 1; i < len(argv); i++ {
+			switch argv[i] {
+			case "--key":
+				if i+1 >= len(argv) {
+					return usageErr("onboard --key needs a file path")
+				}
+				i++
+				keyFile = argv[i]
+			case "--user":
+				if i+1 >= len(argv) {
+					return usageErr("onboard --user needs a value")
+				}
+				i++
+				reqBody.User = argv[i]
+			case "--image":
+				if i+1 >= len(argv) {
+					return usageErr("onboard --image needs a value")
+				}
+				i++
+				reqBody.Image = argv[i]
+			case "--peer-url":
+				if i+1 >= len(argv) {
+					return usageErr("onboard --peer-url needs a value")
+				}
+				i++
+				reqBody.PeerURL = argv[i]
+			case "--port":
+				if i+1 >= len(argv) {
+					return usageErr("onboard --port needs a value")
+				}
+				i++
+				n, err := strconv.Atoi(argv[i])
+				if err != nil || n < 1 || n > 65535 {
+					return usageErr("onboard --port must be 1..65535")
+				}
+				reqBody.Port = n
+			default:
+				return usageErr("onboard: unknown flag %q", argv[i])
+			}
+		}
+		if keyFile == "" {
+			return usageErr("onboard needs --key <file> (SSH private key)")
+		}
+		keyBytes, err := os.ReadFile(keyFile)
+		if err != nil {
+			return fmt.Errorf("read %s: %w", keyFile, err)
+		}
+		reqBody.PrivateKey = string(keyBytes)
+		// Onboarding can take minutes (image pull); the client
+		// timeout is already 5m. On failure the peer returns a
+		// partial result with steps; surface it either way.
+		code, raw, err := c.doRaw(http.MethodPost, "/hosts/onboard", jsonBytes(reqBody), strPtr("application/json"))
+		if err != nil && code == 0 {
+			return err
+		}
+		var resp api.OnboardResponse
+		if jerr := json.Unmarshal(raw, &resp); jerr != nil {
+			if err != nil {
+				return err
+			}
+			return fmt.Errorf("parse onboard response: %v", jerr)
+		}
+		if opts.json {
+			return writeJSON(stdout, &resp)
+		}
+		for _, s := range resp.Steps {
+			mark := "✓"
+			if !s.OK {
+				mark = "✗"
+			}
+			_, _ = fmt.Fprintf(stdout, "%s %s", mark, s.Name)
+			if s.Detail != "" {
+				_, _ = fmt.Fprintf(stdout, " — %s", s.Detail)
+			}
+			_, _ = fmt.Fprintln(stdout)
+		}
+		if err != nil {
+			return fmt.Errorf("%s: %v", resp.Address, err)
+		}
+		if resp.Error != "" {
+			return fmt.Errorf("%s: %s", resp.Address, resp.Error)
+		}
+		_, _ = fmt.Fprintf(stdout, "%s onboarded: docker=%s compose=%s container=%s peer=%s healthy=%v\n",
+			resp.Address, resp.Docker, resp.Compose, resp.Container, resp.PeerURL, resp.Healthy)
+		return nil
 	default:
 		return usageErr("unknown command %q", cmd)
 	}
@@ -291,6 +384,8 @@ func jsonBytes(v any) []byte {
 	b, _ := json.Marshal(v)
 	return b
 }
+
+func strPtr(s string) *string { return &s }
 
 type client struct {
 	peer string

@@ -24,7 +24,7 @@ const schemas = doc.components.schemas;
 const emitted = new Set();
 const chunks = [];
 
-const ORDER = ["Error", "Health", "Peer", "Service", "Stack", "Stacks", "DeploySvc", "DeployResult", "VolumeDesc", "SnapshotManifest", "SyncEntry", "SyncManifest"];
+const ORDER = ["Error", "Health", "Peer", "Service", "Stack", "Stacks", "DeploySvc", "DeployResult", "VolumeDesc", "SnapshotManifest", "SyncEntry", "SyncManifest", "OnboardStep", "OnboardResponse"];
 
 function refName(ref) {
   const m = /^#\/components\/schemas\/(.+)$/.exec(ref);

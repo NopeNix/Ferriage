@@ -5,7 +5,7 @@
 > `.openhands/memory/`. Read order: this file → memory index →
 > `AGENTS.md`.
 
-**Updated:** 2026-11-20, session 013
+**Updated:** 2026-11-20, session 014
 **Where the work is:** Phases 0–2 done. Phase 1 (milestone, 1.1–1.6):
 peer+`/healthz`, state dir + adopt by labels, ADR 0001 manifest
 file-sync + identity, ADR 0002 snapshot export/import, health-gated
@@ -18,16 +18,21 @@ CLI + stack detail** — `internal/api` contract behind
 **Phase 3 item 2 done: logs/stats/exec + Monaco** (ADR 0005) —
 peer logs/stats/exec/compose handlers + hand-rolled WS console,
 `ServiceTools`/`StatsPanel`/`ComposeEditor` in the UI, BFF raw
-upgrade pipe, CLI logs/stats/exec twins. Full routine `40/0`.
+upgrade pipe, CLI logs/stats/exec twins. **Phase 3 item 3 done:
+SSH onboarding** (ADR 0006) — native Go SSH, key-only, TO-FU
+host keys, Docker check/install, compose render, healthz gate,
+`POST /hosts/onboard`, `ferriage onboard`, `OnboardHost` UI
+card. Full routine `40/0` (e2e: localhost sshd onboarded, new
+peer healthy).
 `CONCEPT.md` canonical.
 **Stack:** Go peer, React/shadcn UI (separate container, Monaco
 vendored offline), Iroh mesh (later). GitHub `NopeNix/Ferriage`,
 Docker Hub `nopenix/ferriage`.
-**Still open:** Phase 3 items 3–8 (SSH onboarding, Shoutrrr,
-audit, auto-update, MCP, restic polish); first image tag
-(Phase 4 ship, user-gated).
-**Next session:** Phase 3 item 3 — SSH onboarding (zero-touch:
-address + key → Docker check → one Ferriage container).
+**Still open:** Phase 3 items 4–8 (Shoutrrr, audit, auto-update,
+MCP, restic polish); first image tag (Phase 4 ship,
+user-gated).
+**Next session:** Phase 3 item 4 — Shoutrrr notifications
+(built-in channel; deploy/onboard events).
 **Dev host:** home box (prototyping). **Prod:** VPS + LAN hosts —
 never test mesh/agent changes against them without confirmation.
 Dev ports on this box: peer 18080, BFF 19080, Dex 18081 (8080 is
@@ -36,6 +41,7 @@ Open WebUI). Kill the dev peer before `scripts/test.sh`.
 
 ## Session log
 
+- [014 — phase 3 ssh onboarding](handover/2026-11-20-014-phase3-ssh-onboarding.md) — ADR 0006: native x/crypto/ssh, key-only, TO-FU host keys, Docker check/install, POST /hosts/onboard, ferriage onboard, OnboardHost UI; e2e localhost sshd onboarded; full routine 40/0
 - [013 — phase 3 logs/stats/exec](handover/2026-11-20-013-phase3-logs-stats-exec.md) — ADR 0005: logs/stats/exec + WS console (hand-rolled RFC6455) + Monaco vendored offline + BFF raw upgrade pipe; full routine 40/0
 - [012 — phase 3 api+cli](handover/2026-11-20-012-phase3-api-cli.md) — internal/api typed contract + /openapi.json + drift test; cmd/ferriage CLI twin; StackDetail view; full routine 29/0
 - [011 — phase 2 ui shell](handover/2026-11-20-011-phase2-ui-shell.md) — web/ + BFF OIDC gate (Dex dev IdP), layer-3 baseline, full routine 19/0

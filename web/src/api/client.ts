@@ -1,4 +1,4 @@
-import type { ComposeFile, DeployResult, Error as ApiError, ExecResult, Logs, Peer, SnapshotManifest, Stacks, Stats } from "./types";
+import type { ComposeFile, DeployResult, Error as ApiError, ExecResult, Logs, OnboardResponse, Peer, SnapshotManifest, Stacks, Stats } from "./types";
 
 // The UI talks to the BFF at /api/*, which proxies to the peer.
 // The peer API is typed by the OpenAPI contract served at
@@ -118,5 +118,42 @@ export const api = {
       throw new Error(`/stacks/${name}/import: ${res.status} ${body?.error ?? res.statusText}`);
     }
     return (await res.json()) as SnapshotManifest;
+  },
+  // Zero-touch SSH onboarding (ADR 0006): address + key, Docker
+  // check, one Ferriage container. The key is read client-side
+  // and sent once; the peer keeps it in memory only.
+  onboardHost: async (req: {
+    address: string;
+    user?: string;
+    privateKey: string;
+    image?: string;
+    peerUrl?: string;
+    port?: number;
+  }): Promise<OnboardResponse> => {
+    const session = await getSession();
+    if (!session) throw new Error(`/hosts/onboard: 401 Unauthorized`);
+    const res = await fetch(`/api/hosts/onboard`, {
+      method: "POST",
+      headers: { "x-csrf-token": session.csrf, "content-type": "application/json" },
+      body: JSON.stringify({
+        address: req.address,
+        user: req.user || undefined,
+        private_key: req.privateKey,
+        image: req.image || undefined,
+        peer_url: req.peerUrl || undefined,
+        port: req.port || undefined,
+      }),
+    });
+    if (!res.ok) {
+      const body = (await res.json().catch(() => null)) as (ApiError & Partial<OnboardResponse>) | null;
+      // On partial failure the peer returns 502 with the steps.
+      if (body && Array.isArray((body as OnboardResponse).steps)) {
+        const partial = body as OnboardResponse;
+        partial.error = partial.error || body.error || `HTTP ${res.status}`;
+        return partial;
+      }
+      throw new Error(`/hosts/onboard: ${res.status} ${body?.error ?? res.statusText}`);
+    }
+    return (await res.json()) as OnboardResponse;
   },
 };

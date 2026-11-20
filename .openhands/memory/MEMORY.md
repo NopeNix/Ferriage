@@ -19,3 +19,4 @@
 | 2026-11-20 | [011-phase2-ui-shell](log/2026-11-20-011-phase2-ui-shell.md) | phase2 | web/ Vite+React+Tailwind+shadcn; BFF OIDC gate (ADR 0004), Dex dev IdP (ADR 0003); openid-client v6 method-API; dev ports 18080/19080/18081 (8080=Open WebUI); layer-3 png-diff 19/0 |
 | 2026-11-20 | [012-phase3-api-cli](log/2026-11-20-012-phase3-api-cli.md) | phase3 | typed API (internal/api + OpenAPI + drift test), cmd/ferriage CLI twin, StackDetail; full routine 29/0 |
 | 2026-11-20 | [013-phase3-logs-stats-exec](log/2026-11-20-013-phase3-logs-stats-exec.md) | phase3 | ADR 0005: logs/stats/exec + WS console (hand-rolled RFC6455) + Monaco vendored offline + BFF raw upgrade pipe; errdefs deprecation; full routine 40/0 |
+| 2026-11-20 | [014-phase3-ssh-onboarding](log/2026-11-20-014-phase3-ssh-onboarding.md) | phase3 | ADR 0006: native x/crypto/ssh, TO-FU store (missing/empty ≠ pinned), pull_policy missing; full routine 40/0 |
