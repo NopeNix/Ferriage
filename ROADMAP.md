@@ -80,7 +80,7 @@ its volume, healthy on arrival. Record host + URL in `HANDOVER.md`.
 5. **Audit log** — who did what, when ✓ 2026-11-20 (ADR 0008)
 6. **Auto-update** — per-node digest poll, `poll` vs `auto` policy,
    snapshot-before-update, DBs default `poll` ✓ 2026-11-20 (ADR 0009)
-7. **MCP server** — homelab is AI-heavy
+7. **MCP server** — homelab is AI-heavy ✓ 2026-11-20 (ADR 0010)
 8. **Backup/restore polish** — incremental restic snapshots,
    retention, node-level disaster recovery
 

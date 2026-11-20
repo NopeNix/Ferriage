@@ -175,6 +175,21 @@ YAML
             if $F audit --limit 0 >/dev/null 2>&1; then bad "cli: audit --limit 0 must fail (exit)"; else ok "cli: audit --limit 0 exits non-zero"; fi
             if curl -sS -X DELETE "http://127.0.0.1:$CLI_PORT/audit" >/dev/null 2>&1 && [ ! -f "$CLI_TMP/stacks/.ferriage/audit.jsonl" ]; then :; fi
             if $F audit 2>/dev/null | grep -q "compose.save"; then ok "cli: audit records compose.save"; else bad "cli: audit records compose.save"; fi
+            # Phase 3.7 (ADR 0010): MCP server — tools/list,
+            # a mutating tool call, audit of the inner action,
+            # and the CLI twin. The MCP envelope must NOT be
+            # audited; the deploy inside it must be.
+            if $F mcp tools 2>/dev/null | grep -q "deploy_stack"; then ok "cli: mcp tools/list (CLI twin)"; else bad "cli: mcp tools"; fi
+            if curl -sS -X POST "http://127.0.0.1:$CLI_PORT/mcp" -H 'Content-Type: application/json' \
+                -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"test","version":"1"}}}' 2>/dev/null \
+                | grep -q '"protocolVersion":"2025-03-26"'; then ok "cli: mcp initialize"; else bad "cli: mcp initialize"; fi
+            if curl -sS -X POST "http://127.0.0.1:$CLI_PORT/mcp" -H 'Content-Type: application/json' \
+                -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"deploy_stack","arguments":{"stack":"'$CLI_STACK'"}}}' 2>/dev/null \
+                | grep -q '\\"healthy\\":true'; then ok "cli: mcp tools/call deploy_stack"; else bad "cli: mcp tools/call deploy_stack"; fi
+            if $F audit --actor mcp --action deploy 2>/dev/null | grep -q "deploy"; then ok "cli: mcp inner action audited (actor mcp)"; else bad "cli: mcp inner action audited"; fi
+            if $F audit 2>/dev/null | grep -q '"/mcp"'; then bad "cli: mcp envelope must not be audited"; else ok "cli: mcp envelope not audited"; fi
+            if $F mcp call get_peer 2>/dev/null | grep -q '"peer_id"'; then ok "cli: mcp call get_peer (CLI twin)"; else bad "cli: mcp call"; fi
+            if curl -sS "http://127.0.0.1:$CLI_PORT/mcp" 2>/dev/null | grep -q '"transport":"mcp-streamable-http"'; then ok "cli: GET /mcp describes surface"; else bad "cli: GET /mcp"; fi
             kill $PEER_PID >/dev/null 2>&1
         fi
         docker compose -p "$CLI_STACK" -f "$CLI_TMP/stacks/$CLI_STACK/compose.yaml" down -v --remove-orphans >/dev/null 2>&1

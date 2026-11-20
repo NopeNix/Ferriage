@@ -21,6 +21,9 @@
 // ferriage [--peer URL] [--json] update check <stack>
 // ferriage [--peer URL] [--json] update policy <stack> --policy poll|auto [--interval DUR]
 // ferriage [--peer URL] [--json] update run <stack>
+// ferriage [--peer URL] [--json] mcp
+// ferriage [--peer URL] [--json] mcp tools
+// ferriage [--peer URL] [--json] mcp call <tool> --args '<json>'
 // ferriage version
 //
 // The peer defaults to $FERRIAGE_PEER, else http://localhost:8080.
@@ -65,6 +68,9 @@ Usage:
   ferriage [--peer URL] [--json] update check <stack>
   ferriage [--peer URL] [--json] update policy <stack> --policy poll|auto [--interval DUR]
   ferriage [--peer URL] [--json] update run <stack>
+  ferriage [--peer URL] [--json] mcp
+  ferriage [--peer URL] [--json] mcp tools
+  ferriage [--peer URL] [--json] mcp call <tool> --args '<json>'
   ferriage version
   ferriage help
 
@@ -476,6 +482,8 @@ func run(args []string, stdout, stderr io.Writer) error {
 		return nil
 	case "update":
 		return runUpdate(c, opts, argv, stdout)
+	case "mcp":
+		return runMCP(c, opts, argv, stdout)
 	default:
 		return usageErr("unknown command %q", cmd)
 	}
@@ -591,6 +599,122 @@ func printUpdateStatus(stdout io.Writer, s api.UpdateStatus) {
 	}
 	if s.Error != "" {
 		_, _ = fmt.Fprintf(stdout, "  error: %s\n", s.Error)
+	}
+}
+
+// runMCP is the CLI twin of the MCP server surface (ADR 0010):
+// it speaks JSON-RPC to the peer's POST /mcp endpoint, so an
+// operator can prove and drive the same tools an AI client
+// uses, from the terminal. `mcp` prints the surface
+// description, `mcp tools` lists tools, `mcp call <tool>
+// [--args <json>]` invokes one.
+func runMCP(c *client, opts options, argv []string, stdout io.Writer) error {
+	if len(argv) == 0 || argv[0] == "" {
+		if opts.json {
+			// Print the GET /mcp description verbatim.
+			var v any
+			if err := c.get("/mcp", &v); err != nil {
+				return err
+			}
+			return writeJSON(stdout, &v)
+		}
+		var v any
+		if err := c.get("/mcp", &v); err != nil {
+			return err
+		}
+		m, _ := v.(map[string]any)
+		_, _ = fmt.Fprintf(stdout, "mcp server: %v (protocol %v, %d tools, transport %v)\n",
+			m["server"], m["protocol"], len(m["tools"].([]any)), m["transport"])
+		return nil
+	}
+	switch argv[0] {
+	case "tools":
+		var res struct {
+			Result struct {
+				Tools []struct {
+					Name        string          `json:"name"`
+					Description string          `json:"description"`
+					InputSchema json.RawMessage `json:"inputSchema"`
+					Annotations struct {
+						ReadOnly    bool `json:"readOnlyHint"`
+						Destructive bool `json:"destructiveHint"`
+					} `json:"annotations"`
+				} `json:"tools"`
+			} `json:"result"`
+			Error *struct {
+				Code    int    `json:"code"`
+				Message string `json:"message"`
+			} `json:"error"`
+		}
+		if err := c.postJSON("/mcp", jsonBytes(map[string]any{
+			"jsonrpc": "2.0", "id": 1, "method": "tools/list", "params": map[string]any{},
+		}), &res); err != nil {
+			return err
+		}
+		if res.Error != nil {
+			return fmt.Errorf("mcp tools/list: %s", res.Error.Message)
+		}
+		if opts.json {
+			return writeJSON(stdout, &res.Result.Tools)
+		}
+		for _, t := range res.Result.Tools {
+			mode := "read"
+			if t.Annotations.Destructive {
+				mode = "destructive"
+			} else if !t.Annotations.ReadOnly {
+				mode = "write"
+			}
+			_, _ = fmt.Fprintf(stdout, "%s (%s) — %s\n", t.Name, mode, t.Description)
+		}
+		return nil
+	case "call":
+		if len(argv) < 2 {
+			return usageErr("mcp call needs a tool name")
+		}
+		tool := argv[1]
+		argsRaw := "{}"
+		for i := 2; i < len(argv); i++ {
+			if argv[i] == "--args" && i+1 < len(argv) {
+				i++
+				argsRaw = argv[i]
+			} else {
+				return usageErr("mcp call: unknown arg %q", argv[i])
+			}
+		}
+		if !json.Valid([]byte(argsRaw)) {
+			return usageErr("mcp call --args must be valid JSON")
+		}
+		var resp struct {
+			Result struct {
+				Content []struct {
+					Type string `json:"type"`
+					Text string `json:"text"`
+				} `json:"content"`
+				IsError bool `json:"isError"`
+			} `json:"result"`
+			Error *struct {
+				Code    int    `json:"code"`
+				Message string `json:"message"`
+			} `json:"error"`
+		}
+		if err := c.postJSON("/mcp", jsonBytes(map[string]any{
+			"jsonrpc": "2.0", "id": 1, "method": "tools/call",
+			"params": map[string]any{"name": tool, "arguments": json.RawMessage(argsRaw)},
+		}), &resp); err != nil {
+			return err
+		}
+		if resp.Error != nil {
+			return fmt.Errorf("mcp call %s: %s", tool, resp.Error.Message)
+		}
+		for _, block := range resp.Result.Content {
+			_, _ = fmt.Fprintln(stdout, block.Text)
+		}
+		if resp.Result.IsError {
+			return fmt.Errorf("mcp call %s: tool reported an error", tool)
+		}
+		return nil
+	default:
+		return usageErr("mcp: unknown subcommand %q (tools | call)", argv[0])
 	}
 }
 

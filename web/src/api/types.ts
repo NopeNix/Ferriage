@@ -159,6 +159,29 @@ export interface Logs {
   truncated: boolean;
 }
 
+export interface McpDescription {
+  server: Record<string, unknown>;
+  protocol: string;
+  transport: string;
+  stateless: boolean;
+  tools: string[];
+  doc: string;
+}
+
+export interface McpRequest {
+  jsonrpc: string;
+  id: unknown;
+  method: string;
+  params?: Record<string, unknown>;
+}
+
+export interface McpResponse {
+  jsonrpc: string;
+  id: unknown;
+  result?: Record<string, unknown>;
+  error?: Record<string, unknown>;
+}
+
 export interface NotifyStatus {
   enabled: boolean;
   channels: number;

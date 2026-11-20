@@ -183,6 +183,15 @@ const server = createServer((req, res) => {
   } else if (url.pathname.startsWith("/api/")) {
     if (auth && !auth.checkApi(req)) return send(res, 401, { error: "unauthorized" });
     proxyApi(req, res).catch(() => send(res, 502, { error: "peer unreachable" }));
+  } else if (url.pathname === "/mcp") {
+    // MCP server surface (ADR 0010): same OIDC gate as
+    // /api/* — AI clients authenticate through the BFF
+    // session or a BFF-issued token, never a bare peer call
+    // from outside the trusted net. The /mcp- prefix form
+    // (/api/mcp) is the SPA-style alias for tooling that
+    // expects API-rooted paths.
+    if (auth && !auth.checkApi(req)) return send(res, 401, { error: "unauthorized" });
+    proxyApi(req, res).catch(() => send(res, 502, { error: "peer unreachable" }));
   } else {
     serveStatic(req, res).catch(() => send(res, 404, { error: "not found" }));
   }

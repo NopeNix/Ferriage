@@ -264,3 +264,36 @@ type UpdatePolicyResponse struct {
 	Interval string `json:"interval"`
 	Stateful bool   `json:"stateful"`
 }
+
+// MCPRequest is one JSON-RPC 2.0 request to POST /mcp
+// (ADR 0010). It is modelled as a typed struct for the
+// OpenAPI contract, but the live wire is MCP JSON-RPC: the
+// peer's internal/mcp handler parses id/method/params and
+// never goes through this struct's fields.
+type MCPRequest struct {
+	JSONRPC string `json:"jsonrpc"`
+	ID      any    `json:"id"`
+	Method  string `json:"method"`
+	Params  any    `json:"params,omitempty"`
+}
+
+// MCPResponse is one JSON-RPC 2.0 response from POST /mcp.
+type MCPResponse struct {
+	JSONRPC string `json:"jsonrpc"`
+	ID      any    `json:"id"`
+	Result  any    `json:"result,omitempty"`
+	Error   any    `json:"error,omitempty"`
+}
+
+// McpDescription is the body of GET /mcp (ADR 0010): the
+// MCP surface description for non-MCP clients (operators
+// checking the surface by hand). Tools are names only; the
+// full list with schemas comes from tools/list.
+type McpDescription struct {
+	Server    string   `json:"server"`
+	Protocol  string   `json:"protocol"`
+	Transport string   `json:"transport"`
+	Stateless bool     `json:"stateless"`
+	Tools     []string `json:"tools"`
+	Doc       string   `json:"doc"`
+}

@@ -36,6 +36,30 @@ func Middleware(s *Store, next http.Handler) http.Handler {
 	})
 }
 
+// Record classifies one request and appends its entry when
+// classify() calls it audited. It is the same classifier the
+// middleware uses, factored out for in-process dispatch:
+// the MCP server replays tool calls through the peer mux as
+// plain HTTP requests and records them here, so an MCP
+// deploy lands as "deploy" (not "/mcp") with the caller's
+// actor — the action the agent actually performed. Best-
+// effort like Middleware (a failed append logs, never fails
+// the operation).
+func Record(s *Store, r *http.Request, status int) {
+	action, target, ok := classify(r)
+	if !ok {
+		return
+	}
+	if err := s.Append(Entry{
+		Actor:  actorOf(r),
+		Action: string(action),
+		Target: target,
+		Status: status,
+	}); err != nil {
+		log.Printf("ferriage audit: append failed: %v", err)
+	}
+}
+
 // statusRecorder captures the first WriteHeader status.
 type statusRecorder struct {
 	http.ResponseWriter
@@ -72,10 +96,20 @@ func actorOf(r *http.Request) string {
 // mutating routes are still recorded with a generic action
 // so no operator write escapes the log.
 func classify(r *http.Request) (Action, string, bool) {
+	p := r.URL.Path
+	if p == "/mcp" {
+		// The MCP envelope (ADR 0010) is mesh machinery, not
+		// an operator action: each tools/call dispatches
+		// in-process through the peer mux as its own HTTP
+		// request (deploy, exec, ...) and *that* request is
+		// classified below. Recording the envelope itself
+		// would log "action /mcp" for every agent call and
+		// hide the real operation.
+		return "", "", false
+	}
 	if r.Method == http.MethodGet || r.Method == http.MethodHead || r.Method == http.MethodOptions {
 		return "", "", false
 	}
-	p := r.URL.Path
 	switch {
 	case p == "/hosts/onboard":
 		// The onboard target (address) lives in the request

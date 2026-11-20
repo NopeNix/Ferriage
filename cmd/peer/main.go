@@ -22,6 +22,7 @@ import (
 	"github.com/NopeNix/Ferriage/internal/health"
 	"github.com/NopeNix/Ferriage/internal/identity"
 	"github.com/NopeNix/Ferriage/internal/logs"
+	"github.com/NopeNix/Ferriage/internal/mcp"
 	"github.com/NopeNix/Ferriage/internal/notify"
 	"github.com/NopeNix/Ferriage/internal/onboard"
 	"github.com/NopeNix/Ferriage/internal/snapshot"
@@ -133,6 +134,14 @@ func main() {
 	updateMgr.SetNotifier(notifierAdapter{notifier})
 	updateMgr.SetAudit(auditAdapter{auditStore})
 	update.Register(mux, updateMgr)
+
+	// MCP server (ADR 0010): Streamable HTTP at POST /mcp.
+	// Tool calls dispatch in-process through this same mux,
+	// so they see the audit middleware and actor header
+	// exactly like browser/CLI traffic. Register last, after
+	// every other route exists for the tool table to reach.
+	mcp.Register(mux, mux, auditStore)
+	log.Printf("ferriage mcp: POST /mcp (MCP Streamable HTTP, %s)", mcp.ProtocolVersion)
 
 	srv := &http.Server{
 		Addr:              addr,

@@ -28,6 +28,8 @@
 //	POST /update/{name}/check        force a check now
 //	PUT  /update/{name}/policy       set a stack's policy
 //	POST /update/{name}/run          snapshot + deploy now
+//	POST /mcp                        MCP Streamable HTTP (ADR 0010)
+//	GET/DELETE /mcp                  MCP surface description / stateless close
 //	GET  /sync/manifest, /sync/blob  state-sync wire (ADR 0001)
 package api
 
@@ -515,6 +517,52 @@ const Document = `{
           "413": { "$ref": "#/components/responses/TooLarge" }
         }
       }
+    },
+    "/mcp": {
+      "post": {
+        "operationId": "mcpCall",
+        "summary": "MCP Streamable HTTP endpoint (ADR 0010): JSON-RPC 2.0 for tools/list, tools/call, initialize, ping",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/McpRequest" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "JSON-RPC response (or array of responses for a batch)",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/McpResponse" }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" }
+        }
+      },
+      "get": {
+        "operationId": "mcpDescribe",
+        "summary": "MCP surface description (tool inventory for non-MCP clients)",
+        "responses": {
+          "200": {
+            "description": "Surface description",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/McpDescription" }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "mcpClose",
+        "summary": "Stateless close (no session to tear down; 202)",
+        "responses": {
+          "202": { "description": "Accepted" }
+        }
+      }
     }
   },
   "components": {
@@ -868,6 +916,38 @@ const Document = `{
         "required": ["content"],
         "properties": {
           "content": { "type": "string" }
+        }
+      },
+      "McpRequest": {
+        "type": "object",
+        "required": ["jsonrpc", "id", "method"],
+        "properties": {
+          "jsonrpc": { "type": "string" },
+          "id": { "type": ["string", "integer", "null"] },
+          "method": { "type": "string" },
+          "params": { "type": "object" }
+        }
+      },
+      "McpResponse": {
+        "type": "object",
+        "required": ["jsonrpc", "id"],
+        "properties": {
+          "jsonrpc": { "type": "string" },
+          "id": { "type": ["string", "integer", "null"] },
+          "result": { "type": "object" },
+          "error": { "type": "object" }
+        }
+      },
+      "McpDescription": {
+        "type": "object",
+        "required": ["server", "protocol", "transport", "stateless", "tools", "doc"],
+        "properties": {
+          "server": { "type": "object" },
+          "protocol": { "type": "string" },
+          "transport": { "type": "string" },
+          "stateless": { "type": "boolean" },
+          "tools": { "type": "array", "items": { "type": "string" } },
+          "doc": { "type": "string" }
         }
       },
       "SyncEntry": {
