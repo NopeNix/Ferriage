@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/NopeNix/Ferriage/internal/deploy"
 	"github.com/NopeNix/Ferriage/internal/health"
 	"github.com/NopeNix/Ferriage/internal/identity"
 	"github.com/NopeNix/Ferriage/internal/snapshot"
@@ -63,6 +64,7 @@ func main() {
 	mux.Handle("/stacks", stacks.NewHandler())
 	mux.Handle("/", sync.NewHandler(store, idn.ID()))
 	snapshot.Register(mux, stateDir, idn.ID())
+	deploy.Register(mux, stateDir)
 
 	srv := &http.Server{
 		Addr:              addr,

@@ -52,7 +52,7 @@ The milestone that proves the category (CONCEPT § "First milestone").
 | 1.2 | State dir: stacks on disk; peer lists stacks from labels (adopt existing) | `docker compose ps` untouched stacks appear |
 | 1.3 | Mesh sync: two peers (home box + VPS) replicate state dir | file added on A appears on B (✓ 2026-11-20, ADR 0001) |
 | 1.4 | Export: snapshot stack + **volumes** → portable file | round-trip restore on same host (✓ 2026-11-20, ADR 0002) |
-| 1.5 | Import/move: restore snapshot on other peer → deploy → **health-gated** | stack healthy on B, data intact |
+| 1.5 | Import/move: restore snapshot on other peer → deploy → **health-gated** (✓ 2026-11-20) | stack healthy on B, data intact |
 | 1.6 | `deploy/docker-compose.yml` for Ferriage itself; layer-2 smoke in `scripts/test.sh` turns green | `scripts/test.sh` (full) |
 
 **Exit:** one existing stack adopted on each host, moved across with
