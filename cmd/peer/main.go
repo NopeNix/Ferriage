@@ -1,5 +1,6 @@
 // Command peer is the Ferriage peer binary: every node runs it.
-// Phase 1.1 scope: start, serve /healthz. Mesh/state arrive in later steps.
+// Phase 1.1: /healthz. Phase 1.2: /stacks (adopt by labels).
+// Phase 1.3: mesh sync of the state dir (ADR 0001).
 package main
 
 import (
@@ -8,11 +9,14 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"time"
 
 	"github.com/NopeNix/Ferriage/internal/health"
+	"github.com/NopeNix/Ferriage/internal/identity"
 	"github.com/NopeNix/Ferriage/internal/stacks"
 	"github.com/NopeNix/Ferriage/internal/state"
+	"github.com/NopeNix/Ferriage/internal/sync"
 )
 
 func main() {
@@ -30,9 +34,33 @@ func main() {
 	}
 	log.Printf("ferriage peer state dir: %s", stateDir)
 
+	idn, err := identity.LoadOrCreate(stateDir)
+	if err != nil {
+		log.Fatalf("identity: %v", err)
+	}
+	log.Printf("ferriage peer id: %s...", idn.ID()[:16])
+
+	store := sync.New(stateDir, idn.ID())
+	ledger, err := sync.LoadLedger(stateDir)
+	if err != nil {
+		log.Fatalf("sync ledger: %v", err)
+	}
+
+	peers := splitPeers(os.Getenv("FERRIAGE_PEER"))
+	syncInterval := 30 * time.Second
+	if v := os.Getenv("FERRIAGE_SYNC_INTERVAL"); v != "" {
+		if d, err := time.ParseDuration(v); err == nil && d > 0 {
+			syncInterval = d
+		}
+	}
+	if len(peers) > 0 {
+		log.Printf("ferriage sync: pulling from %v every %s", peers, syncInterval)
+	}
+
 	mux := http.NewServeMux()
 	mux.Handle("/healthz", health.NewHandler())
 	mux.Handle("/stacks", stacks.NewHandler())
+	mux.Handle("/", sync.NewHandler(store, idn.ID()))
 
 	srv := &http.Server{
 		Addr:              addr,
@@ -42,6 +70,11 @@ func main() {
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
+
+	if len(peers) > 0 {
+		fetch := &sync.HTTPFetcher{Client: &http.Client{Timeout: 30 * time.Second}}
+		go sync.Loop(ctx, store, ledger, fetch, peers, syncInterval)
+	}
 
 	go func() {
 		log.Printf("ferriage peer listening on %s", addr)
@@ -59,4 +92,17 @@ func main() {
 		os.Exit(1)
 	}
 	log.Println("ferriage peer stopped")
+}
+
+func splitPeers(v string) []string {
+	if strings.TrimSpace(v) == "" {
+		return nil
+	}
+	var out []string
+	for _, p := range strings.Split(v, ",") {
+		if p = strings.TrimSpace(p); p != "" {
+			out = append(out, p)
+		}
+	}
+	return out
 }

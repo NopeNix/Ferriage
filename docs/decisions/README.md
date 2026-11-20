@@ -23,4 +23,4 @@ date: YYYY-MM-DD
 
 | # | Decision | Status | Consequence |
 |---|---|---|---|
-| — | _(none yet — first ADR lands with the first milestone)_ | | |
+| 0001 | [State sync: manifest-based file sync](0001-state-sync.md) | accepted | manifest+blob protocol, LWW per file; transport swappable to Iroh later |
