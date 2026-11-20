@@ -14,6 +14,7 @@ import (
 
 	"github.com/NopeNix/Ferriage/internal/health"
 	"github.com/NopeNix/Ferriage/internal/identity"
+	"github.com/NopeNix/Ferriage/internal/snapshot"
 	"github.com/NopeNix/Ferriage/internal/stacks"
 	"github.com/NopeNix/Ferriage/internal/state"
 	"github.com/NopeNix/Ferriage/internal/sync"
@@ -61,6 +62,7 @@ func main() {
 	mux.Handle("/healthz", health.NewHandler())
 	mux.Handle("/stacks", stacks.NewHandler())
 	mux.Handle("/", sync.NewHandler(store, idn.ID()))
+	snapshot.Register(mux, stateDir, idn.ID())
 
 	srv := &http.Server{
 		Addr:              addr,

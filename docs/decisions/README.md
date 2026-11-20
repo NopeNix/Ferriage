@@ -24,3 +24,4 @@ date: YYYY-MM-DD
 | # | Decision | Status | Consequence |
 |---|---|---|---|
 | 0001 | [State sync: manifest-based file sync](0001-state-sync.md) | accepted | manifest+blob protocol, LWW per file; transport swappable to Iroh later |
+| 0002 | [Snapshot format: single gzip+tar](0002-snapshot-format.md) | accepted | one-file snapshot; volumes via helper-container exec capture (not restic repo) |
