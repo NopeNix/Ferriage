@@ -1,0 +1,42 @@
+# Go
+*.exe
+*.test
+*.out
+/bin/
+
+# Node / frontend
+node_modules/
+dist/
+build/
+
+# Local state — never commit (stacks dirs, volumes, snapshots)
+data/
+stacks/
+volumes/
+snapshots/
+*.db
+*.db-wal
+*.db-shm
+*.db-journal
+
+# Secrets & local config
+.env
+.env.*
+*.key
+*.pem
+secrets/
+
+# Editor / OS
+.idea/
+.vscode/
+*.swp
+.DS_Store
+
+# Local scratch
+/tmp/
+tmp/
+
+# Playwright outputs (baselines themselves ARE committed)
+tests/baselines/*.new.png
+test-results/
+playwright-report/
