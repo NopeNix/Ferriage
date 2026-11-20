@@ -1,4 +1,4 @@
-import type { Audit, ComposeFile, DeployResult, Error as ApiError, ExecResult, Logs, NotifyStatus, NotifyTest, OnboardResponse, Peer, SnapshotManifest, Stacks, Stats } from "./types";
+import type { Audit, ComposeFile, DeployResult, Error as ApiError, ExecResult, Logs, NotifyStatus, NotifyTest, OnboardResponse, Peer, SnapshotManifest, Stacks, Stats, UpdateList, UpdatePolicyResponse, UpdateRun, UpdateStatus } from "./types";
 
 // The UI talks to the BFF at /api/*, which proxies to the peer.
 // The peer API is typed by the OpenAPI contract served at
@@ -183,5 +183,50 @@ export const api = {
       throw new Error(`/notify/test: ${res.status} ${body?.error ?? res.statusText}`);
     }
     return (await res.json()) as NotifyTest;
+  },
+  // Auto-update (ADR 0009): reports + policy writes. Policy
+  // writes are trusted-operator actions (Zone 2), audited by
+  // the peer as update.policy.
+  update: () => request<UpdateList>("GET", "/update"),
+  updateOne: (name: string) => request<UpdateStatus>("GET", `/update/${enc(name)}`),
+  checkUpdate: async (name: string): Promise<UpdateStatus> => {
+    const session = await getSession();
+    if (!session) throw new Error(`/update/${name}/check: 401 Unauthorized`);
+    const res = await fetch(`/api/update/${enc(name)}/check`, {
+      method: "POST",
+      headers: { "x-csrf-token": session.csrf },
+    });
+    if (!res.ok) {
+      const body = (await res.json().catch(() => null)) as ApiError | null;
+      throw new Error(`/update/${name}/check: ${res.status} ${body?.error ?? res.statusText}`);
+    }
+    return (await res.json()) as UpdateStatus;
+  },
+  setUpdatePolicy: async (name: string, policy: "poll" | "auto", interval?: string): Promise<UpdatePolicyResponse> => {
+    const session = await getSession();
+    if (!session) throw new Error(`/update/${name}/policy: 401 Unauthorized`);
+    const res = await fetch(`/api/update/${enc(name)}/policy`, {
+      method: "PUT",
+      headers: { "x-csrf-token": session.csrf, "content-type": "application/json" },
+      body: JSON.stringify({ policy, interval: interval || undefined }),
+    });
+    if (!res.ok) {
+      const body = (await res.json().catch(() => null)) as ApiError | null;
+      throw new Error(`/update/${name}/policy: ${res.status} ${body?.error ?? res.statusText}`);
+    }
+    return (await res.json()) as UpdatePolicyResponse;
+  },
+  runUpdate: async (name: string): Promise<UpdateRun> => {
+    const session = await getSession();
+    if (!session) throw new Error(`/update/${name}/run: 401 Unauthorized`);
+    const res = await fetch(`/api/update/${enc(name)}/run`, {
+      method: "POST",
+      headers: { "x-csrf-token": session.csrf },
+    });
+    if (!res.ok) {
+      const body = (await res.json().catch(() => null)) as ApiError | null;
+      throw new Error(`/update/${name}/run: ${res.status} ${body?.error ?? res.statusText}`);
+    }
+    return (await res.json()) as UpdateRun;
   },
 };

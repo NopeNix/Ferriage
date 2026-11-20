@@ -33,6 +33,9 @@ function mockFetch(impl: (url: string) => unknown) {
       if (u.includes("/notify")) {
         return { ok: true, status: 200, statusText: "OK", json: async () => ({ enabled: false, channels: 0 }) };
       }
+      if (u.includes("/update")) {
+        return { ok: true, status: 200, statusText: "OK", json: async () => ({ stacks: [] }) };
+      }
       return { ok: true, status: 200, statusText: "OK", json: async () => impl(u) };
     }),
   );

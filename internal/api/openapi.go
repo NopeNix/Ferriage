@@ -23,6 +23,11 @@
 //	POST /hosts/onboard              SSH onboarding (internal/onboard, ADR 0006)
 //	GET  /notify, POST /notify/test  redacted Shoutrrr status/test (internal/notify, ADR 0007)
 //	GET  /audit                      audit log, newest first (internal/audit, ADR 0008)
+//	GET  /update                     auto-update reports (internal/update, ADR 0009)
+//	GET  /update/{name}              one stack's update report
+//	POST /update/{name}/check        force a check now
+//	PUT  /update/{name}/policy       set a stack's policy
+//	POST /update/{name}/run          snapshot + deploy now
 //	GET  /sync/manifest, /sync/blob  state-sync wire (ADR 0001)
 package api
 
@@ -370,6 +375,104 @@ const Document = `{
         }
       }
     },
+    "/update": {
+      "get": {
+        "operationId": "listUpdate",
+        "summary": "Auto-update reports for every stack (ADR 0009: per-node digest poll, poll vs auto)",
+        "responses": {
+          "200": {
+            "description": "Update reports",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/UpdateList" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/update/{name}": {
+      "get": {
+        "operationId": "getUpdate",
+        "summary": "One stack's update report",
+        "parameters": [{ "$ref": "#/components/parameters/StackName" }],
+        "responses": {
+          "200": {
+            "description": "Update report",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/UpdateStatus" }
+              }
+            }
+          },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      }
+    },
+    "/update/{name}/check": {
+      "post": {
+        "operationId": "checkUpdate",
+        "summary": "Force a synchronous digest check for one stack (never deploys; not audited)",
+        "parameters": [{ "$ref": "#/components/parameters/StackName" }],
+        "responses": {
+          "200": {
+            "description": "Fresh update report",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/UpdateStatus" }
+              }
+            }
+          },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "502": { "$ref": "#/components/responses/UpstreamError" }
+        }
+      }
+    },
+    "/update/{name}/policy": {
+      "put": {
+        "operationId": "setUpdatePolicy",
+        "summary": "Set a stack's update policy (poll or auto) and check interval",
+        "parameters": [{ "$ref": "#/components/parameters/StackName" }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/UpdatePolicyRequest" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Effective policy after the write",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/UpdatePolicyResponse" }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      }
+    },
+    "/update/{name}/run": {
+      "post": {
+        "operationId": "runUpdate",
+        "summary": "Force the snapshot-first auto-update flow now, regardless of policy",
+        "parameters": [{ "$ref": "#/components/parameters/StackName" }],
+        "responses": {
+          "200": {
+            "description": "Run outcome",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/UpdateRun" }
+              }
+            }
+          },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      }
+    },
     "/sync/manifest": {
       "get": {
         "operationId": "getSyncManifest",
@@ -686,6 +789,68 @@ const Document = `{
         "required": ["entries"],
         "properties": {
           "entries": { "type": "array", "items": { "$ref": "#/components/schemas/AuditEntry" } }
+        }
+      },
+      "UpdateService": {
+        "type": "object",
+        "required": ["service", "image", "outcome"],
+        "properties": {
+          "service": { "type": "string" },
+          "image": { "type": "string" },
+          "local": { "type": "string" },
+          "remote": { "type": "string" },
+          "outcome": { "type": "string" },
+          "detail": { "type": "string" }
+        }
+      },
+      "UpdateRun": {
+        "type": "object",
+        "required": ["stack", "at", "ok"],
+        "properties": {
+          "stack": { "type": "string" },
+          "at": { "type": "string", "format": "date-time" },
+          "snapshot": { "type": "string" },
+          "ok": { "type": "boolean" },
+          "detail": { "type": "string" }
+        }
+      },
+      "UpdateStatus": {
+        "type": "object",
+        "required": ["stack", "state", "policy", "stateful", "services"],
+        "properties": {
+          "stack": { "type": "string" },
+          "state": { "type": "string" },
+          "policy": { "type": "string" },
+          "stateful": { "type": "boolean" },
+          "checked_at": { "type": "string", "format": "date-time" },
+          "services": { "type": "array", "items": { "$ref": "#/components/schemas/UpdateService" } },
+          "last_run": { "$ref": "#/components/schemas/UpdateRun" },
+          "snapshot": { "type": "string" },
+          "error": { "type": "string" }
+        }
+      },
+      "UpdateList": {
+        "type": "object",
+        "required": ["stacks"],
+        "properties": {
+          "stacks": { "type": "array", "items": { "$ref": "#/components/schemas/UpdateStatus" } }
+        }
+      },
+      "UpdatePolicyRequest": {
+        "type": "object",
+        "properties": {
+          "policy": { "type": "string", "enum": ["poll", "auto"] },
+          "interval": { "type": "string" }
+        }
+      },
+      "UpdatePolicyResponse": {
+        "type": "object",
+        "required": ["stack", "policy", "interval", "stateful"],
+        "properties": {
+          "stack": { "type": "string" },
+          "policy": { "type": "string" },
+          "interval": { "type": "string" },
+          "stateful": { "type": "boolean" }
         }
       },
       "ComposeFile": {

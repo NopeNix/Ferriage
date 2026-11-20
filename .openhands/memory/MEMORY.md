@@ -22,3 +22,4 @@
 | 2026-11-20 | [014-phase3-ssh-onboarding](log/2026-11-20-014-phase3-ssh-onboarding.md) | phase3 | ADR 0006: native x/crypto/ssh, TO-FU store (missing/empty ≠ pinned), pull_policy missing; full routine 40/0 |
 | 2026-11-20 | [015-phase3-shoutrrr](log/2026-11-20-015-phase3-shoutrrr.md) | phase3 | ADR 0007: Shoutrrr env-only (FERRIAGE_NOTIFY_URLS), async best-effort (never inherit request ctx), redacted GET /notify; full routine 40/0 |
 | 2026-11-20 | [016-phase3-audit](log/2026-11-20-016-phase3-audit.md) | phase3 | ADR 0008: audit JSONL in .ferriage/, middleware-recorded mutating actions, actor via X-Ferriage-Actor (BFF strips+re-sets); full routine 46/0 |
+| 2026-11-20 | [017-phase3-auto-update](log/2026-11-20-017-phase3-auto-update.md) | phase3 | ADR 0009: per-node digest-poll loop, poll/auto, stateful→poll, snapshot-first, Shoutrrr events; RepoDigests vs ID compare trap; stale go-run peer on :18082; full routine 46/0 |

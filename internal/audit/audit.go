@@ -43,6 +43,13 @@ const (
 	ActionExec        Action = "exec"
 	ActionOnboard     Action = "onboard"
 	ActionNotifyTest  Action = "notify.test"
+	// ActionUpdatePolicy / ActionUpdateRun are the auto-update
+	// operator actions (ADR 0009): setting a stack's policy, and
+	// forcing the snapshot+deploy flow. The update loop's own
+	// auto runs are recorded by the loop with actor "peer", not
+	// through this middleware.
+	ActionUpdatePolicy Action = "update.policy"
+	ActionUpdateRun    Action = "update.run"
 )
 
 // ActorHeader carries the reported operator identity. The BFF

@@ -5,7 +5,7 @@
 > `.openhands/memory/`. Read order: this file → memory index →
 > `AGENTS.md`.
 
-**Updated:** 2026-11-20, session 016
+**Updated:** 2026-11-20, session 017
 **Where the work is:** Phases 0–2 done. Phase 1 (milestone, 1.1–1.6):
 peer+`/healthz`, state dir + adopt by labels, ADR 0001 manifest
 file-sync + identity, ADR 0002 snapshot export/import, health-gated
@@ -34,24 +34,32 @@ mutating actions (actor/action/target/status), BFF
 `X-Ferriage-Actor` from the OIDC `sub`, read-only
 `GET /audit`, CLI `ferriage audit`, `AuditLog` UI card;
 live proof via bad-onboard POST (dev · onboard · 400 in the
-browser). Full 46/0.
+browser). Full 46/0. **Phase 3 item 6 done: auto-update**
+(ADR 0009) — `internal/update` per-node digest-poll loop,
+`poll` vs `auto` policy in `.ferriage/update.json`, stateful
+(named volumes) default `poll`, snapshot-before-update,
+Shoutrrr `update.*` events, `GET /update` + check/policy/run,
+CLI `ferriage update`, `UpdateStatus` UI card + baseline;
+live proof vs real daemon (available reported, auto run
+snapshotted + healthy, webhook delivered). Full 46/0.
 `CONCEPT.md` canonical.
 **Stack:** Go peer, React/shadcn UI (separate container, Monaco
 vendored offline), Iroh mesh (later). GitHub `NopeNix/Ferriage`,
 Docker Hub `nopenix/ferriage`.
-**Still open:** Phase 3 items 6–8 (auto-update, MCP, restic
-polish); first image tag (Phase 4 ship, user-gated).
-**Next session:** Phase 3 item 6 — auto-update: per-node digest
-poll, `poll` vs `auto` policy, snapshot-before-update, DBs
-default `poll`, Shoutrrr on every event.
+**Still open:** Phase 3 items 7–8 (MCP, restic polish); first
+image tag (Phase 4 ship, user-gated).
+**Next session:** Phase 3 item 7 — MCP server (homelab is
+AI-heavy). Settle stdio vs HTTP transport and the tool set
+first.
 **Dev host:** home box (prototyping). **Prod:** VPS + LAN hosts —
 never test mesh/agent changes against them without confirmation.
 Dev ports on this box: peer 18080, BFF 19080, Dex 18081 (8080 is
 Open WebUI). Kill the dev peer before `scripts/test.sh`.
-**Live instance:** none (dev stack stopped after session 016).
+**Live instance:** none (dev stack stopped after session 017).
 
 ## Session log
 
+- [017 — phase 3 auto-update](handover/2026-11-20-017-phase3-auto-update.md) — ADR 0009: per-node digest-poll loop, poll/auto, stateful→poll, snapshot-first, Shoutrrr events; GET /update + CLI + UI card; full routine 46/0
 - [016 — phase 3 audit](handover/2026-11-20-016-phase3-audit.md) — ADR 0008: audit JSONL in .ferriage/, middleware-recorded mutating actions, BFF actor header, read-only GET /audit + CLI + UI card; full routine 46/0
 - [015 — phase 3 shoutrrr](handover/2026-11-20-015-phase3-shoutrrr.md) — ADR 0007: Shoutrrr env-only (FERRIAGE_NOTIFY_URLS), async best-effort, redacted GET /notify + test, CLI+UI twins; live proof vs local webhook; full routine 40/0
 - [014 — phase 3 ssh onboarding](handover/2026-11-20-014-phase3-ssh-onboarding.md) — ADR 0006: native x/crypto/ssh, key-only, TO-FU host keys, Docker check/install, POST /hosts/onboard, ferriage onboard, OnboardHost UI; e2e localhost sshd onboarded; full routine 40/0

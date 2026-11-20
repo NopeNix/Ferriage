@@ -69,6 +69,12 @@ const (
 	EventOnboardFailed Event = "onboard.failed"
 	EventTest          Event = "notify.test"
 	EventPeerStarted   Event = "peer.started"
+	// Auto-update events (ADR 0009): a newer digest is an event
+	// whether or not the peer redeploys it.
+	EventUpdateAvailable    Event = "update.available"
+	EventUpdateOK           Event = "update.ok"
+	EventUpdateFailed       Event = "update.failed"
+	EventUpdateSnapshotFail Event = "update.snapshot_failed"
 )
 
 // message is one notification: an event, its subject (stack or

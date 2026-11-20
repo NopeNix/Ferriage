@@ -204,3 +204,63 @@ type AuditEntry struct {
 type AuditResponse struct {
 	Entries []AuditEntry `json:"entries"`
 }
+
+// UpdateService is one service's digest-check outcome (ADR 0009).
+// Local/Remote are content digests (never empty on success).
+// Outcome is one of up-to-date, available, unresolvable.
+type UpdateService struct {
+	Service string `json:"service"`
+	Image   string `json:"image"`
+	Local   string `json:"local,omitempty"`
+	Remote  string `json:"remote,omitempty"`
+	Outcome string `json:"outcome"`
+	Detail  string `json:"detail,omitempty"`
+}
+
+// UpdateRun is one auto-update run's outcome.
+type UpdateRun struct {
+	Stack    string `json:"stack"`
+	At       string `json:"at"`
+	Snapshot string `json:"snapshot,omitempty"`
+	OK       bool   `json:"ok"`
+	Detail   string `json:"detail,omitempty"`
+}
+
+// UpdateStatus is one stack's update report (ADR 0009).
+// State is one of up-to-date, available, unresolvable,
+// not-running, check-failed. Policy is poll or auto.
+// Stateful marks stacks whose rendered Compose declares named
+// volumes; stateful stacks never inherit `auto` implicitly.
+type UpdateStatus struct {
+	Stack     string          `json:"stack"`
+	State     string          `json:"state"`
+	Policy    string          `json:"policy"`
+	Stateful  bool            `json:"stateful"`
+	CheckedAt string          `json:"checked_at,omitempty"`
+	Services  []UpdateService `json:"services"`
+	LastRun   *UpdateRun      `json:"last_run,omitempty"`
+	Snapshot  string          `json:"snapshot,omitempty"`
+	Error     string          `json:"error,omitempty"`
+}
+
+// UpdateList is the body of GET /update.
+type UpdateList struct {
+	Stacks []UpdateStatus `json:"stacks"`
+}
+
+// UpdatePolicyRequest is the body of PUT /update/{name}/policy.
+// Either field may be set; setting interval to "" keeps the
+// existing override. There is no way to clear a policy via empty
+// — the field is omitted-or-set, never half-cleared.
+type UpdatePolicyRequest struct {
+	Policy   string `json:"policy,omitempty"`
+	Interval string `json:"interval,omitempty"`
+}
+
+// UpdatePolicyResponse is the body of PUT /update/{name}/policy.
+type UpdatePolicyResponse struct {
+	Stack    string `json:"stack"`
+	Policy   string `json:"policy"`
+	Interval string `json:"interval"`
+	Stateful bool   `json:"stateful"`
+}

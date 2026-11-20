@@ -87,6 +87,26 @@ func classify(r *http.Request) (Action, string, bool) {
 		return ActionOnboard, "onboard", true
 	case p == "/notify/test":
 		return ActionNotifyTest, "", true
+	case strings.HasPrefix(p, "/update/"):
+		// /update/{name}/policy | /update/{name}/run (ADR 0009).
+		// /update/{name}/check is a probe, not an action: it is
+		// POST but changes no durable state (only the transient
+		// report cache), so it is not audited — like GETs.
+		rest := strings.TrimPrefix(p, "/update/")
+		parts := strings.SplitN(rest, "/", 2)
+		if len(parts) < 2 {
+			return "", "", false
+		}
+		if parts[1] == "policy" {
+			return ActionUpdatePolicy, parts[0], true
+		}
+		if parts[1] == "run" {
+			return ActionUpdateRun, parts[0], true
+		}
+		if parts[1] == "check" {
+			return "", "", false
+		}
+		return Action(p), parts[0], true
 	case strings.HasPrefix(p, "/stacks/"):
 		rest := strings.TrimPrefix(p, "/stacks/")
 		// rest = "{name}/deploy" | "{name}/export" | ...

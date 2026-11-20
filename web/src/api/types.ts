@@ -184,3 +184,48 @@ export interface OnboardRequest {
 export interface Stats {
   stats: ContainerStats[];
 }
+
+export interface UpdateService {
+  service: string;
+  image: string;
+  local?: string;
+  remote?: string;
+  outcome: string;
+  detail?: string;
+}
+
+export interface UpdateRun {
+  stack: string;
+  at: string;
+  snapshot?: string;
+  ok: boolean;
+  detail?: string;
+}
+
+export interface UpdateStatus {
+  stack: string;
+  state: string;
+  policy: string;
+  stateful: boolean;
+  checked_at?: string;
+  services: UpdateService[];
+  last_run?: UpdateRun;
+  snapshot?: string;
+  error?: string;
+}
+
+export interface UpdateList {
+  stacks: UpdateStatus[];
+}
+
+export interface UpdatePolicyRequest {
+  policy?: string;
+  interval?: string;
+}
+
+export interface UpdatePolicyResponse {
+  stack: string;
+  policy: string;
+  interval: string;
+  stateful: boolean;
+}

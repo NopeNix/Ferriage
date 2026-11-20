@@ -29,6 +29,7 @@ import (
 	"github.com/NopeNix/Ferriage/internal/state"
 	"github.com/NopeNix/Ferriage/internal/stats"
 	"github.com/NopeNix/Ferriage/internal/sync"
+	"github.com/NopeNix/Ferriage/internal/update"
 )
 
 func main() {
@@ -107,6 +108,32 @@ func main() {
 		log.Printf("ferriage audit: logging to .ferriage/audit.jsonl (max %d lines)", auditMaxLines())
 	}
 
+	// Auto-update (ADR 0009): per-node digest poll loop, poll vs
+	// auto policy per stack, snapshot-before-update. Defaults are
+	// safe: poll-only, daily. The loop's own runs are recorded
+	// with actor "peer", not through the audit middleware.
+	updateCfg := update.Config{
+		DefaultPolicy:   update.PolicyPoll,
+		DefaultInterval: 24 * time.Hour,
+		Tick:            time.Hour,
+		Disabled:        os.Getenv("FERRIAGE_UPDATE_DISABLE") == "1",
+	}
+	if v := os.Getenv("FERRIAGE_UPDATE_POLICY"); v == update.PolicyAuto || v == update.PolicyPoll {
+		updateCfg.DefaultPolicy = v
+	}
+	if v := os.Getenv("FERRIAGE_UPDATE_INTERVAL"); v != "" {
+		if d, err := time.ParseDuration(v); err == nil && d > 0 {
+			updateCfg.DefaultInterval = d
+		}
+	}
+	updateMgr, err := update.NewProdManager(stateDir, updateCfg, idn.ID())
+	if err != nil {
+		log.Fatalf("update manager: %v", err)
+	}
+	updateMgr.SetNotifier(notifierAdapter{notifier})
+	updateMgr.SetAudit(auditAdapter{auditStore})
+	update.Register(mux, updateMgr)
+
 	srv := &http.Server{
 		Addr:              addr,
 		Handler:           audit.Middleware(auditStore, mux),
@@ -120,6 +147,8 @@ func main() {
 		fetch := &sync.HTTPFetcher{Client: &http.Client{Timeout: 30 * time.Second}}
 		go sync.Loop(ctx, store, ledger, fetch, peers, syncInterval)
 	}
+
+	go updateMgr.Loop(ctx)
 
 	go func() {
 		log.Printf("ferriage peer listening on %s", addr)
@@ -137,6 +166,29 @@ func main() {
 		os.Exit(1)
 	}
 	log.Println("ferriage peer stopped")
+}
+
+// notifierAdapter bridges *notify.Notifier onto update.Notifier
+// (update.Event is stringly-typed to avoid an import cycle; the
+// wire values are the notify.Event constants).
+type notifierAdapter struct{ n *notify.Notifier }
+
+func (a notifierAdapter) Notify(_ context.Context, ev update.Event, subject, detail string) {
+	if a.n == nil {
+		return
+	}
+	a.n.Notify(context.Background(), notify.Event(ev), subject, detail)
+}
+
+// auditAdapter bridges *audit.Store onto update.AuditSink for
+// the update loop's own machine runs (actor "peer").
+type auditAdapter struct{ s *audit.Store }
+
+func (a auditAdapter) Append(actor, action, target string, status int, detail string) {
+	if a.s == nil {
+		return
+	}
+	_ = a.s.Append(audit.Entry{Actor: actor, Action: action, Target: target, Status: status, Detail: detail})
 }
 
 // auditMaxLines reads FERRIAGE_AUDIT_MAX_LINES (default

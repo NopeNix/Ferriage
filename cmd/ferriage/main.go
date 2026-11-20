@@ -17,6 +17,10 @@
 // ferriage [--peer URL] [--json] notify status
 // ferriage [--peer URL] [--json] notify test
 // ferriage [--peer URL] [--json] audit [--limit N] [--actor U] [--action A] [--since TS]
+// ferriage [--peer URL] [--json] update [stack]
+// ferriage [--peer URL] [--json] update check <stack>
+// ferriage [--peer URL] [--json] update policy <stack> --policy poll|auto [--interval DUR]
+// ferriage [--peer URL] [--json] update run <stack>
 // ferriage version
 //
 // The peer defaults to $FERRIAGE_PEER, else http://localhost:8080.
@@ -57,6 +61,10 @@ Usage:
   ferriage [--peer URL] [--json] notify status
   ferriage [--peer URL] [--json] notify test
   ferriage [--peer URL] [--json] audit [--limit N] [--actor U] [--action A] [--since TS]
+  ferriage [--peer URL] [--json] update [stack]
+  ferriage [--peer URL] [--json] update check <stack>
+  ferriage [--peer URL] [--json] update policy <stack> --policy poll|auto [--interval DUR]
+  ferriage [--peer URL] [--json] update run <stack>
   ferriage version
   ferriage help
 
@@ -466,8 +474,123 @@ func run(args []string, stdout, stderr io.Writer) error {
 		_, _ = fmt.Fprintf(stdout, "%s onboarded: docker=%s compose=%s container=%s peer=%s healthy=%v\n",
 			resp.Address, resp.Docker, resp.Compose, resp.Container, resp.PeerURL, resp.Healthy)
 		return nil
+	case "update":
+		return runUpdate(c, opts, argv, stdout)
 	default:
 		return usageErr("unknown command %q", cmd)
+	}
+}
+
+// runUpdate is the CLI twin of the auto-update surfaces
+// (ADR 0009): list reports, check, set policy, force a run.
+func runUpdate(c *client, opts options, argv []string, stdout io.Writer) error {
+	if len(argv) == 0 {
+		var resp api.UpdateList
+		if err := c.get("/update", &resp); err != nil {
+			return err
+		}
+		if opts.json {
+			return writeJSON(stdout, &resp)
+		}
+		for _, s := range resp.Stacks {
+			printUpdateStatus(stdout, s)
+		}
+		return nil
+	}
+	sub := argv[0]
+	if len(argv) < 2 {
+		return usageErr("update %s needs a stack name", sub)
+	}
+	stack := argv[1]
+	switch sub {
+	case "check":
+		var st api.UpdateStatus
+		if err := c.postJSON("/update/"+url.PathEscape(stack)+"/check", nil, &st); err != nil {
+			return err
+		}
+		if opts.json {
+			return writeJSON(stdout, &st)
+		}
+		printUpdateStatus(stdout, st)
+		return nil
+	case "policy":
+		req := api.UpdatePolicyRequest{}
+		for i := 2; i < len(argv); i++ {
+			switch argv[i] {
+			case "--policy":
+				if i+1 >= len(argv) {
+					return usageErr("update policy --policy needs a value")
+				}
+				i++
+				req.Policy = argv[i]
+			case "--interval":
+				if i+1 >= len(argv) {
+					return usageErr("update policy --interval needs a value")
+				}
+				i++
+				req.Interval = argv[i]
+			default:
+				return usageErr("update policy: unknown flag %q", argv[i])
+			}
+		}
+		if req.Policy == "" && req.Interval == "" {
+			return usageErr("update policy needs --policy and/or --interval")
+		}
+		var resp api.UpdatePolicyResponse
+		if err := c.doPUT("/update/"+url.PathEscape(stack)+"/policy", jsonBytes(req), &resp); err != nil {
+			return err
+		}
+		if opts.json {
+			return writeJSON(stdout, &resp)
+		}
+		_, _ = fmt.Fprintf(stdout, "%s: policy=%s interval=%s stateful=%v\n", resp.Stack, resp.Policy, resp.Interval, resp.Stateful)
+		return nil
+	case "run":
+		var run api.UpdateRun
+		if err := c.postJSON("/update/"+url.PathEscape(stack)+"/run", nil, &run); err != nil {
+			return err
+		}
+		if opts.json {
+			return writeJSON(stdout, &run)
+		}
+		ok := "FAILED"
+		if run.OK {
+			ok = "ok"
+		}
+		_, _ = fmt.Fprintf(stdout, "%s: %s at %s (snapshot %s)\n", run.Stack, ok, run.At, run.Snapshot)
+		if run.Detail != "" {
+			_, _ = fmt.Fprintf(stdout, "  detail: %s\n", run.Detail)
+		}
+		return nil
+	default:
+		return usageErr("update: unknown subcommand %q (check | policy | run)", sub)
+	}
+}
+
+func printUpdateStatus(stdout io.Writer, s api.UpdateStatus) {
+	_, _ = fmt.Fprintf(stdout, "%s: state=%s policy=%s stateful=%v", s.Stack, s.State, s.Policy, s.Stateful)
+	if s.CheckedAt != "" {
+		_, _ = fmt.Fprintf(stdout, " checked_at=%s", s.CheckedAt)
+	}
+	_, _ = fmt.Fprintln(stdout)
+	for _, svc := range s.Services {
+		_, _ = fmt.Fprintf(stdout, "  %s %s %s", svc.Service, svc.Image, svc.Outcome)
+		if svc.Local != "" {
+			_, _ = fmt.Fprintf(stdout, " local=%s", svc.Local)
+		}
+		if svc.Remote != "" {
+			_, _ = fmt.Fprintf(stdout, " remote=%s", svc.Remote)
+		}
+		if svc.Detail != "" {
+			_, _ = fmt.Fprintf(stdout, " (%s)", svc.Detail)
+		}
+		_, _ = fmt.Fprintln(stdout)
+	}
+	if s.LastRun != nil {
+		_, _ = fmt.Fprintf(stdout, "  last run: ok=%v at=%s snapshot=%s detail=%s\n", s.LastRun.OK, s.LastRun.At, s.LastRun.Snapshot, s.LastRun.Detail)
+	}
+	if s.Error != "" {
+		_, _ = fmt.Fprintf(stdout, "  error: %s\n", s.Error)
 	}
 }
 
@@ -507,6 +630,11 @@ func (c *client) get(path string, out any) error {
 func (c *client) postJSON(path string, body []byte, out any) error {
 	ct := "application/json"
 	return c.do(http.MethodPost, path, body, &ct, out)
+}
+
+func (c *client) doPUT(path string, body []byte, out any) error {
+	ct := "application/json"
+	return c.do(http.MethodPut, path, body, &ct, out)
 }
 
 func (c *client) postBinary(path string, body []byte) ([]byte, error) {
