@@ -11,7 +11,7 @@ build/
 
 # Local state — never commit (stacks dirs, volumes, snapshots)
 data/
-stacks/
+/stacks/
 volumes/
 snapshots/
 *.db

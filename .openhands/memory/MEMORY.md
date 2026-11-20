@@ -10,3 +10,4 @@
 | 2026-11-20 | [002-roadmap](log/2026-11-20-002-roadmap.md) | roadmap | phase 0→4 plan; low-record principle |
 | 2026-11-20 | [003-phase0-confirmation](log/2026-11-20-003-phase0-confirmation.md) | phase0 | stack confirmed as-is; Docker Hub nopenix/ferriage; No Go on dev host yet |
 | 2026-11-20 | [004-phase1-scaffold](log/2026-11-20-004-phase1-scaffold.md) | phase1 | 1.1 peer+healthz green; Go 1.25.5 user-local (no sudo) in ~/bin |
+| 2026-11-20 | [005-phase1-2-adopt](log/2026-11-20-005-phase1-2-adopt.md) | phase1.2 | state dir + adopt by compose labels + /stacks; docker deps pinned to Go 1.25; /stacks/ gitignore anchor fix |

@@ -11,6 +11,8 @@ import (
 	"time"
 
 	"github.com/NopeNix/Ferriage/internal/health"
+	"github.com/NopeNix/Ferriage/internal/stacks"
+	"github.com/NopeNix/Ferriage/internal/state"
 )
 
 func main() {
@@ -19,8 +21,18 @@ func main() {
 		addr = ":8080"
 	}
 
+	stateDir := os.Getenv("FERRIAGE_STATE_DIR")
+	if stateDir == "" {
+		stateDir = "./stacks"
+	}
+	if _, err := state.New(stateDir); err != nil {
+		log.Fatalf("state dir: %v", err)
+	}
+	log.Printf("ferriage peer state dir: %s", stateDir)
+
 	mux := http.NewServeMux()
 	mux.Handle("/healthz", health.NewHandler())
+	mux.Handle("/stacks", stacks.NewHandler())
 
 	srv := &http.Server{
 		Addr:              addr,
