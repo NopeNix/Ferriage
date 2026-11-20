@@ -42,8 +42,8 @@ isn't the dev box.
 
 - GitHub home: [`NopeNix/Ferriage`](https://github.com/NopeNix/Ferriage)
   (public, confirmed 2026-11-20).
-- Docker Hub namespace: **TBD** — record it here when the first
-  image ships.
+- Docker Hub: **`nopenix/ferriage`** (confirmed 2026-11-20).
+  First image tag: record here when the first image ships.
 - Release rules (tag / release / image push need explicit
   confirmation): `AGENTS.md` §6.
 

@@ -21,7 +21,8 @@ Concept stage (2026-11-20). The canonical product spec is
 [`CONCEPT.md`](CONCEPT.md) — problem, 12 hard requirements, two-zone
 security model, mesh architecture, component choices, and the first
 milestone (two peers, state sync, adopt + move one stack with its
-volume).
+volume). **[`ROADMAP.md`](ROADMAP.md)** lays out the phased plan and
+the minimum-viable record-keeping discipline for dev iteration.
 
 ## Design at a glance
 
@@ -40,6 +41,7 @@ volume).
 | Path | What |
 |---|---|
 | `CONCEPT.md` | Product spec (canonical) |
+| `ROADMAP.md` | Phased plan + low-overhead dev discipline |
 | `AGENTS.md` | Operating contract for agents |
 | `HANDOVER.md` + `handover/` | Current state + frozen session notes |
 | `.openhands/memory/` | Learnings index + per-session logs |
