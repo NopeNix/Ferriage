@@ -43,7 +43,9 @@ jobs:
 
       - name: Extract version
         id: version
-        run: echo "version=${GITHUB_REF#refs/tags/}" >> "$GITHUB_OUTPUT"
+        run: |
+          echo "version=${GITHUB_REF#refs/tags/}" >> "$GITHUB_OUTPUT"
+          echo "repo_lower=$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
 
       - name: Build and push peer image
         uses: docker/build-push-action@v6
@@ -54,8 +56,8 @@ jobs:
           tags: |
             nopenix/ferriage:${{ steps.version.outputs.version }}
             nopenix/ferriage:latest
-            ghcr.io/${{ github.repository }}/ferriage:${{ steps.version.outputs.version }}
-            ghcr.io/${{ github.repository }}/ferriage:latest
+            ghcr.io/${{ steps.version.outputs.repo_lower }}/ferriage:${{ steps.version.outputs.version }}
+            ghcr.io/${{ steps.version.outputs.repo_lower }}/ferriage:latest
           build-args: |
             FERRIAGE_VERSION=${{ steps.version.outputs.version }}
             FERRIAGE_COMMIT=${{ github.sha }}
@@ -69,8 +71,8 @@ jobs:
           tags: |
             nopenix/ferriage-ui:${{ steps.version.outputs.version }}
             nopenix/ferriage-ui:latest
-            ghcr.io/${{ github.repository }}/ferriage-ui:${{ steps.version.outputs.version }}
-            ghcr.io/${{ github.repository }}/ferriage-ui:latest
+            ghcr.io/${{ steps.version.outputs.repo_lower }}/ferriage-ui:${{ steps.version.outputs.version }}
+            ghcr.io/${{ steps.version.outputs.repo_lower }}/ferriage-ui:latest
           build-args: |
             FERRIAGE_VERSION=${{ steps.version.outputs.version }}
             FERRIAGE_COMMIT=${{ github.sha }}
