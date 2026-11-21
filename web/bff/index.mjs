@@ -177,7 +177,16 @@ async function handleAuth(req, res) {
 
 const server = createServer((req, res) => {
   const url = new URL(req.url, "http://bff");
-  if (url.pathname.startsWith("/auth/")) {
+  if (url.pathname === "/healthz") {
+    // Liveness probe (deploy/docker-compose.yml healthcheck).
+    // Unauthenticated by design — like the peer's /healthz, this
+    // leaks no more than liveness + build identity.
+    send(res, 200, {
+      status: "ok",
+      version: process.env.FERRIAGE_VERSION || "dev",
+      commit: process.env.FERRIAGE_COMMIT || "unknown",
+    });
+  } else if (url.pathname.startsWith("/auth/")) {
     if (!auth) return send(res, 404, { error: "not found" });
     handleAuth(req, res).catch(() => send(res, 500, { error: "internal error" }));
   } else if (url.pathname.startsWith("/api/")) {

@@ -6,6 +6,9 @@
 #
 # Build:  docker build -f deploy/Dockerfile.ui -t ferriage-ui:dev .
 # The repo root is the build context (web/ lives there).
+#
+# Release: pass --build-arg FERRIAGE_VERSION=vX.Y.Z
+#          --build-arg FERRIAGE_COMMIT=<sha> (see scripts/release.sh).
 
 FROM node:24-alpine AS build
 
@@ -15,7 +18,14 @@ RUN npm ci
 COPY web/ ./
 RUN npm run build
 
-FROM node:24-alpine
+FROM node:24-alpine AS runtime
+
+# Build-time identity (stamped by scripts/release.sh / CI).
+# The BFF reports these on GET /healthz.
+ARG FERRIAGE_VERSION=dev
+ARG FERRIAGE_COMMIT=unknown
+ENV FERRIAGE_VERSION=$FERRIAGE_VERSION \
+    FERRIAGE_COMMIT=$FERRIAGE_COMMIT
 
 WORKDIR /app
 # The BFF needs openid-client at runtime (bff/auth.mjs); production

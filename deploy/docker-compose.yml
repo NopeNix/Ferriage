@@ -13,8 +13,9 @@
 # URLs, e.g. http://10.0.0.1:8080). The mesh is plain HTTP pull in
 # Phase 1; Iroh is Phase 4 territory (see docs/architecture.md).
 #
-# Image: nopenix/ferriage (Docker Hub). Build locally with
-# `docker compose -f deploy/docker-compose.yml up -d --build`.
+# Images: nopenix/ferriage (peer) + nopenix/ferriage-ui (UI).
+# Build locally with `docker compose -f deploy/docker-compose.yml up -d --build`
+# (pass FERRIAGE_VERSION / FERRIAGE_COMMIT to stamp the build).
 
 services:
   peer:
@@ -23,6 +24,9 @@ services:
     build:
       context: ..
       dockerfile: deploy/Dockerfile
+      args:
+        FERRIAGE_VERSION: ${FERRIAGE_VERSION:-dev}
+        FERRIAGE_COMMIT: ${FERRIAGE_COMMIT:-unknown}
     restart: unless-stopped
     environment:
       # State dir inside the container; the peer binary defaults agree.
@@ -50,6 +54,39 @@ services:
       - "${FERRIAGE_PORT:-8080}:8080"
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://localhost:8080/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  ui:
+    image: nopenix/ferriage-ui:${FERRIAGE_TAG:-latest}
+    pull_policy: missing
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.ui
+      args:
+        FERRIAGE_VERSION: ${FERRIAGE_VERSION:-dev}
+        FERRIAGE_COMMIT: ${FERRIAGE_COMMIT:-unknown}
+    restart: unless-stopped
+    depends_on:
+      peer:
+        condition: service_healthy
+    environment:
+      # BFF proxies to the peer in this compose network (peer service name).
+      FERRIAGE_PEER: http://peer:8080
+      # OIDC gate (ADR 0004). Empty = auth off (dev only).
+      FERRIAGE_OIDC_ISSUER: ${FERRIAGE_OIDC_ISSUER:-}
+      FERRIAGE_OIDC_CLIENT_ID: ${FERRIAGE_OIDC_CLIENT_ID:-}
+      FERRIAGE_OIDC_CLIENT_SECRET: ${FERRIAGE_OIDC_CLIENT_SECRET:-}
+      FERRIAGE_OIDC_REDIRECT_URI: ${FERRIAGE_OIDC_REDIRECT_URI:-}
+      FERRIAGE_SESSION_SECRET: ${FERRIAGE_SESSION_SECRET:-}
+      FERRIAGE_COOKIE_SECURE: ${FERRIAGE_COOKIE_SECURE:-}
+    ports:
+      - "${FERRIAGE_UI_PORT:-5173}:5173"
+    # No curl/wget in node:24-alpine — probe with node itself.
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:5173/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
       interval: 30s
       timeout: 5s
       retries: 3

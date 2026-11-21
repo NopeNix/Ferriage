@@ -5,7 +5,7 @@
 > `.openhands/memory/`. Read order: this file → memory index →
 > `AGENTS.md`.
 
-**Updated:** 2026-11-21, session 020
+**Updated:** 2026-11-21, session 021
 **Where the work is:** Phases 0–2 done. Phase 1 (milestone, 1.1–1.6):
 peer+`/healthz`, state dir + adopt by labels, ADR 0001 manifest
 file-sync + identity, ADR 0002 snapshot export/import, health-gated
@@ -72,10 +72,18 @@ tombstones). Full routine **67/0**. `CONCEPT.md` canonical.
 **Stack:** Go peer, React/shadcn UI (separate container, Monaco
 vendored offline), Iroh mesh (later). GitHub `NopeNix/Ferriage`,
 Docker Hub `nopenix/ferriage`.
-**Still open:** first image tag (Phase 4 ship, user-gated
-per AGENTS.md §6).
-**Next session:** Phase 4 ship — confirm the tag with the
-operator, then tag → `gh release` → push `nopenix/ferriage`.
+**Phase 4 release path ready (session 021):** version stamping
+fixed (both Dockerfiles declare `FERRIAGE_VERSION`/`COMMIT` args;
+peer + BFF report them on their `/healthz`), compose ships peer +
+UI (`nopenix/ferriage-ui`), `scripts/release.sh` (dry-run mode)
++ CI `release.yml` (v* tag → Docker Hub + ghcr.io + release).
+Full routine 67/0; compose stack smoke healthy.
+**Still open:** the ship itself — first tag e.g. `v0.1.0`, needs
+operator confirmation + `docker login` (Docker Hub
+`nopenix/ferriage` still 404, CI needs `DOCKERHUB_*` secrets).
+**Next session:** Phase 4 ship — confirm the tag, then
+`scripts/release.sh <tag>` (or push `v*` tag for CI) → verify
+`nopenix/ferriage:<tag>` + `ferriage-ui:<tag>`.
 **Dev host:** home box (prototyping). **Prod:** VPS + LAN hosts —
 never test mesh/agent changes against them without confirmation.
 Dev ports on this box: peer 18080, BFF 19080, Dex 18081 (8080 is
@@ -86,6 +94,7 @@ allocates dynamic ports and is immune (session 020).
 
 ## Session log
 
+- [021 — phase 4 release path](handover/2026-11-21-021-phase4-release-path.md) — version stamping fix, BFF /healthz, compose ui service, release.sh + CI release.yml; full routine 67/0; ship still operator-gated
 - [020 — multi-peer e2e](handover/2026-11-21-020-multi-peer-e2e.md) — ADR 0012: origin-gated deletes (+origin_id wire), local-delete tombstones; 3-peer Go tests + container Layer 2.5; full routine 67/0
 - [019 — phase 3 restic](handover/2026-11-20-019-phase3-restic.md) — ADR 0011: restic CLI-in-peer, incremental per-stack + node backups, retention, health-gated restore, CLI + MCP (19) + UI card; full routine 60/0
 - [018 — phase 3 mcp](handover/2026-11-20-018-phase3-mcp.md) — ADR 0010: hand-rolled MCP Streamable HTTP at POST /mcp, 15 tools via in-process mux dispatch, BFF OIDC gate, inner-action audit; full routine 53/0

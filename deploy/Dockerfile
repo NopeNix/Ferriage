@@ -12,8 +12,16 @@
 #
 # Build:  docker build -f deploy/Dockerfile -t ferriage:dev .
 # The repo root is the build context (Go module lives there).
+#
+# Release: pass --build-arg FERRIAGE_VERSION=vX.Y.Z
+#          --build-arg FERRIAGE_COMMIT=<sha> (see scripts/release.sh).
 
 FROM golang:1.25-alpine AS build
+
+# Build-time identity, stamped via -ldflags into internal/version.
+# Defaults keep local dev builds reporting dev/unknown.
+ARG FERRIAGE_VERSION=dev
+ARG FERRIAGE_COMMIT=unknown
 
 RUN apk add --no-cache git ca-certificates
 

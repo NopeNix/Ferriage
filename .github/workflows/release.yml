@@ -1,0 +1,86 @@
+# Ferriage release CI (Phase 4).
+# Triggers on v* tags: builds + pushes both images (Docker Hub mirror on
+# ghcr.io too), then creates the GitHub release. Mirrors scripts/release.sh
+# exactly so manual and CI ships produce identical artifacts.
+#
+# Required repo secrets (Settings -> Secrets and variables -> Actions):
+#   DOCKERHUB_USERNAME  - Docker Hub account owning nopenix/*
+#   DOCKERHUB_TOKEN     - Docker Hub access token (write access)
+name: release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Log in to ghcr.io
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract version
+        id: version
+        run: echo "version=${GITHUB_REF#refs/tags/}" >> "$GITHUB_OUTPUT"
+
+      - name: Build and push peer image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: deploy/Dockerfile
+          push: true
+          tags: |
+            nopenix/ferriage:${{ steps.version.outputs.version }}
+            nopenix/ferriage:latest
+            ghcr.io/${{ github.repository }}/ferriage:${{ steps.version.outputs.version }}
+            ghcr.io/${{ github.repository }}/ferriage:latest
+          build-args: |
+            FERRIAGE_VERSION=${{ steps.version.outputs.version }}
+            FERRIAGE_COMMIT=${{ github.sha }}
+
+      - name: Build and push UI image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: deploy/Dockerfile.ui
+          push: true
+          tags: |
+            nopenix/ferriage-ui:${{ steps.version.outputs.version }}
+            nopenix/ferriage-ui:latest
+            ghcr.io/${{ github.repository }}/ferriage-ui:${{ steps.version.outputs.version }}
+            ghcr.io/${{ github.repository }}/ferriage-ui:latest
+          build-args: |
+            FERRIAGE_VERSION=${{ steps.version.outputs.version }}
+            FERRIAGE_COMMIT=${{ github.sha }}
+
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: Ferriage ${{ steps.version.outputs.version }}
+          body: |
+            Peer: docker pull nopenix/ferriage:${{ steps.version.outputs.version }}
+            UI:   docker pull nopenix/ferriage-ui:${{ steps.version.outputs.version }}
+
+            See docs/deployment.md and deploy/docker-compose.yml to run it. Mirror images live on ghcr.io.
