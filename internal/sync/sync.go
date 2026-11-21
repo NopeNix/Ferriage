@@ -30,6 +30,13 @@ type Entry struct {
 	MTime     time.Time `json:"mtime"`
 	UpdatedAt time.Time `json:"updated_at"`
 	PeerID    string    `json:"peer_id"`
+	// OriginID is the peer that last WROTE this content (the
+	// true originator), carried in the manifest so copies can
+	// never masquerade as originals. PeerID is the serving
+	// peer. Deletes gate on OriginID (ADR 0012). Empty in
+	// manifests from pre-origin peers; receivers treat empty
+	// as "the serving peer is the origin".
+	OriginID string `json:"origin_id,omitempty"`
 }
 
 // Manifest is the wire body of GET /sync/manifest.
@@ -51,14 +58,27 @@ func notFound(msg string) error { return &Error{Code: "not_found", Msg: msg} }
 
 // Store reads and writes the synced state tree.
 type Store struct {
-	Root   string
-	PeerID string
+	Root    string
+	PeerID  string
+	Origins map[string]string // path → origin peer id (ledger-backed)
 }
 
 // New returns a Store rooted at root (the state dir). root's
 // .ferriage subdirectory is never walked.
 func New(root, peerID string) *Store {
-	return &Store{Root: root, PeerID: peerID}
+	return &Store{Root: root, PeerID: peerID, Origins: map[string]string{}}
+}
+
+// SetOrigins installs the path→origin map (from the ledger) so
+// manifests report true origins for synced files. Files the
+// ledger has never seen report this peer as origin (they are
+// local writes — correctly, since only local writes create
+// new paths).
+func (s *Store) SetOrigins(m map[string]string) {
+	if m == nil {
+		m = map[string]string{}
+	}
+	s.Origins = m
 }
 
 // ValidatePath rejects anything that is not a clean, relative,
@@ -150,6 +170,7 @@ func (s *Store) BuildManifest() (*Manifest, error) {
 			MTime:     info.ModTime(),
 			UpdatedAt: info.ModTime(),
 			PeerID:    s.PeerID,
+			OriginID:  s.originOf(rel),
 		})
 		return nil
 	})
@@ -161,6 +182,15 @@ func (s *Store) BuildManifest() (*Manifest, error) {
 		entries = []Entry{}
 	}
 	return &Manifest{PeerID: s.PeerID, GeneratedAt: time.Now().UTC(), Entries: entries}, nil
+}
+
+// originOf returns the recorded origin for a path, defaulting to
+// this peer (a file the ledger has never seen is a local write).
+func (s *Store) originOf(path string) string {
+	if o, ok := s.Origins[path]; ok && o != "" {
+		return o
+	}
+	return s.PeerID
 }
 
 func sha256File(path string) (string, error) {
@@ -263,9 +293,16 @@ func (s *Store) Remove(p string) error {
 }
 
 // LedgerEntry records what a pull last applied for one path.
+// OriginID is the true originator of the current content (the
+// peer that last wrote it, served in the manifest). Deletes
+// fire only when the origin peer drops the path — absence from
+// any other peer's manifest means "this source never had it",
+// which is what makes fan-in (one peer pulling from two) safe.
+// See ADR 0012.
 type LedgerEntry struct {
 	UpdatedAt time.Time `json:"updated_at"`
 	PeerID    string    `json:"peer_id"`
+	OriginID  string    `json:"origin_id,omitempty"`
 	SHA256    string    `json:"sha256"`
 	Deleted   bool      `json:"deleted"`
 }
@@ -304,6 +341,18 @@ func (l *Ledger) HasSynced() bool {
 		}
 	}
 	return false
+}
+
+// Origins projects the ledger into the path→origin map the store
+// serves in its manifest (ADR 0012).
+func (l *Ledger) Origins() map[string]string {
+	out := make(map[string]string, len(l.Entries))
+	for p, e := range l.Entries {
+		if e.OriginID != "" {
+			out[p] = e.OriginID
+		}
+	}
+	return out
 }
 
 // Save persists the ledger atomically.

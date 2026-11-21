@@ -1112,7 +1112,8 @@ const Document = `{
           "size": { "type": "integer", "format": "int64" },
           "mtime": { "type": "string", "format": "date-time" },
           "updated_at": { "type": "string", "format": "date-time" },
-          "peer_id": { "type": "string" }
+          "peer_id": { "type": "string" },
+          "origin_id": { "type": "string" }
         }
       },
       "SyncManifest": {

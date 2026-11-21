@@ -5,7 +5,7 @@
 > `.openhands/memory/`. Read order: this file → memory index →
 > `AGENTS.md`.
 
-**Updated:** 2026-11-20, session 019
+**Updated:** 2026-11-21, session 020
 **Where the work is:** Phases 0–2 done. Phase 1 (milestone, 1.1–1.6):
 peer+`/healthz`, state dir + adopt by labels, ADR 0001 manifest
 file-sync + identity, ADR 0002 snapshot export/import, health-gated
@@ -61,7 +61,14 @@ backup`, 4 MCP tools (15→19), `BackupStatus` UI card, Shoutrrr
 + audit events; live proof rc 0.18.1: dedup (`data_blobs:0`),
 down-v + restore → healthy with volume marker, MCP 19.
 **Phase 3 is 8/8 complete.** Full routine 60/0.
-`CONCEPT.md` canonical.
+**Post-Phase-3 (session 020): multi-peer E2E + ADR 0012** —
+3-instance coverage at two layers (Go `mesh_test.go`, 8 tests;
+shell Layer 2.5, 3 containers in full mesh) exposed and fixed
+four sync defects: fan-in deletes (now origin-gated via new
+additive wire `origin_id`), tombstone lineage (now content-
+aware), dead-peer blocking the list (now per-peer tolerant),
+and operator `rm` being healed back (now local-delete
+tombstones). Full routine **67/0**. `CONCEPT.md` canonical.
 **Stack:** Go peer, React/shadcn UI (separate container, Monaco
 vendored offline), Iroh mesh (later). GitHub `NopeNix/Ferriage`,
 Docker Hub `nopenix/ferriage`.
@@ -72,13 +79,14 @@ operator, then tag → `gh release` → push `nopenix/ferriage`.
 **Dev host:** home box (prototyping). **Prod:** VPS + LAN hosts —
 never test mesh/agent changes against them without confirmation.
 Dev ports on this box: peer 18080, BFF 19080, Dex 18081 (8080 is
-Open WebUI). Kill the dev peer before `scripts/test.sh` — a
-surviving peer poisons layer 2 (bind failure cascades, see
-session 018).
-**Live instance:** none (dev stack stopped after session 019).
+Open WebUI). Kill the dev peer before `scripts/test.sh` —
+layer 2/3 use fixed ports (poisoning, session 018); layer 2.5
+allocates dynamic ports and is immune (session 020).
+**Live instance:** none (dev stack stopped after session 020).
 
 ## Session log
 
+- [020 — multi-peer e2e](handover/2026-11-21-020-multi-peer-e2e.md) — ADR 0012: origin-gated deletes (+origin_id wire), local-delete tombstones; 3-peer Go tests + container Layer 2.5; full routine 67/0
 - [019 — phase 3 restic](handover/2026-11-20-019-phase3-restic.md) — ADR 0011: restic CLI-in-peer, incremental per-stack + node backups, retention, health-gated restore, CLI + MCP (19) + UI card; full routine 60/0
 - [018 — phase 3 mcp](handover/2026-11-20-018-phase3-mcp.md) — ADR 0010: hand-rolled MCP Streamable HTTP at POST /mcp, 15 tools via in-process mux dispatch, BFF OIDC gate, inner-action audit; full routine 53/0
 - [017 — phase 3 auto-update](handover/2026-11-20-017-phase3-auto-update.md) — ADR 0009: per-node digest-poll loop, poll/auto, stateful→poll, snapshot-first, Shoutrrr events; GET /update + CLI + UI card; full routine 46/0

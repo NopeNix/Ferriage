@@ -60,6 +60,9 @@ func main() {
 	if err != nil {
 		log.Fatalf("sync ledger: %v", err)
 	}
+	// The store serves true origins from the ledger so a copy
+	// never masquerades as an original (ADR 0012).
+	store.SetOrigins(ledger.Origins())
 
 	peers := splitPeers(os.Getenv("FERRIAGE_PEER"))
 	// The URL new hosts pull mesh state from when they are

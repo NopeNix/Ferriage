@@ -75,6 +75,7 @@ export interface SyncEntry {
   mtime: string;
   updated_at: string;
   peer_id: string;
+  origin_id?: string;
 }
 
 export interface SyncManifest {

@@ -80,7 +80,8 @@ func newer(r, l Entry) bool {
 }
 
 // Apply reconciles one fetched manifest into the local store under the
-// tombstone rules of ADR 0001. ledger records what was applied.
+// tombstone rules of ADR 0001 (as amended by ADR 0012). ledger records
+// what was applied, including each path's lineage peer.
 func Apply(ctx context.Context, store *Store, ledger *Ledger, fetch Fetcher, base string, m *Manifest) error {
 	local, err := store.BuildManifest()
 	if err != nil {
@@ -95,17 +96,55 @@ func Apply(ctx context.Context, store *Store, ledger *Ledger, fetch Fetcher, bas
 		remoteByPath[e.Path] = e
 	}
 
+	// Local deletes become tombstones FIRST. When the operator
+	// removes a stack dir out-of-band (rm — there is no delete
+	// API; the state dir IS the API), the peer must record the
+	// deletion in its own ledger before pulling anything.
+	// Otherwise it re-pulls the file from a mesh holder on this
+	// very round and heals its own delete back forever, so the
+	// delete never propagates (found by the 3-peer layer-2.5
+	// delete test: the originator kept resurrecting the stack
+	// from peer B). Only ledger-known synced paths qualify —
+	// never-synced local work is untouched.
+	for path, le := range ledger.Entries {
+		if le.Deleted {
+			continue
+		}
+		if _, ok := localByPath[path]; ok {
+			continue // still on disk: possibly edited, not deleted
+		}
+		ledger.Entries[path] = LedgerEntry{
+			Deleted:   true,
+			UpdatedAt: le.UpdatedAt,
+			PeerID:    le.PeerID,
+			OriginID:  le.OriginID,
+			SHA256:    le.SHA256,
+		}
+	}
+
 	// Pull: fetch blobs for remote entries that are newer and differ.
+	// Every successful pull records the entry's true origin — the
+	// peer that last wrote the content, not the peer serving it —
+	// so copies can never masquerade as originals (ADR 0012).
 	for _, r := range m.Entries {
 		l, ok := localByPath[r.Path]
 		if !ok {
-			if le, has := ledger.Entries[r.Path]; has && le.Deleted && !newer(r, Entry{UpdatedAt: le.UpdatedAt, PeerID: le.PeerID, SHA256: le.SHA256}) {
-				continue // honored tombstone: not healed back
+			if le, has := ledger.Entries[r.Path]; has && le.Deleted {
+				// The tombstone honors the exact content it
+				// deleted (same SHA). A different, newer write
+				// revives the path: that is a genuine local
+				// rewrite, not a stale re-offer.
+				if r.SHA256 == le.SHA256 {
+					continue // honored tombstone: not healed back
+				}
+				if !newer(r, Entry{UpdatedAt: le.UpdatedAt, PeerID: r.PeerID, SHA256: le.SHA256}) {
+					continue // stale: not newer than the delete
+				}
 			}
 			if err := pullOne(ctx, store, fetch, base, r); err != nil {
 				return err
 			}
-			ledger.Entries[r.Path] = LedgerEntry{UpdatedAt: localMTime(store, r.Path), PeerID: r.PeerID, SHA256: r.SHA256}
+			ledger.Entries[r.Path] = LedgerEntry{UpdatedAt: r.UpdatedAt, PeerID: r.PeerID, OriginID: originOfEntry(r, m.PeerID), SHA256: r.SHA256}
 			continue
 		}
 		if r.SHA256 == l.SHA256 {
@@ -117,7 +156,7 @@ func Apply(ctx context.Context, store *Store, ledger *Ledger, fetch Fetcher, bas
 		if err := pullOne(ctx, store, fetch, base, r); err != nil {
 			return err
 		}
-		ledger.Entries[r.Path] = LedgerEntry{UpdatedAt: localMTime(store, r.Path), PeerID: r.PeerID, SHA256: r.SHA256}
+		ledger.Entries[r.Path] = LedgerEntry{UpdatedAt: r.UpdatedAt, PeerID: r.PeerID, OriginID: originOfEntry(r, m.PeerID), SHA256: r.SHA256}
 	}
 
 	// Delete propagation: a local path absent from the remote manifest
@@ -127,6 +166,20 @@ func Apply(ctx context.Context, store *Store, ledger *Ledger, fetch Fetcher, bas
 	// without any "first sync" flag. A path the user edited after the
 	// last pull is kept (its mtime is newer than the ledger entry); a
 	// synced copy that is untouched since is deleted.
+	//
+	// Multi-source rule (ADR 0012): the deleting peer must be the
+	// path's ORIGIN peer — the peer that last wrote the content.
+	// Absence from any other peer's manifest means "this source
+	// never had it", which is what makes fan-in (one peer pulling
+	// from two) safe. The origin is carried in the manifest
+	// (Entry.OriginID) and pinned in the ledger, so a copy
+	// served by a non-origin holder can never masquerade as an
+	// original and block the originator's delete. Two earlier
+	// attempts failed here, each caught by the next test layer:
+	// per-source unanimity votes deadlock once every peer holds
+	// a copy (each holder votes "present" forever), and
+	// last-server lineage flips whenever a holder's local mtime
+	// drift makes its copy "newer" than the originator's.
 	for _, l := range local.Entries {
 		if _, ok := remoteByPath[l.Path]; ok {
 			continue
@@ -138,60 +191,99 @@ func Apply(ctx context.Context, store *Store, ledger *Ledger, fetch Fetcher, bas
 		if l.MTime.After(le.UpdatedAt) {
 			continue // edited locally since the pull: keep
 		}
+		origin := le.OriginID
+		if origin == "" {
+			origin = le.PeerID // pre-origin ledger: server == origin
+		}
+		if m.PeerID != origin {
+			continue // not the origin peer: absence is not a delete
+		}
 		if err := store.Remove(l.Path); err != nil {
 			return err
 		}
-		ledger.Entries[l.Path] = LedgerEntry{Deleted: true, UpdatedAt: m.GeneratedAt, PeerID: m.PeerID}
+		// Tombstone keeps the deleted entry's own lineage
+		// (prev UpdatedAt/OriginID/SHA), not the manifest's
+		// generation time: a stale re-offer of the same bytes
+		// (same SHA) is honored-dead, while a genuinely newer
+		// write revives the path.
+		ledger.Entries[l.Path] = LedgerEntry{
+			Deleted:   true,
+			UpdatedAt: le.UpdatedAt,
+			PeerID:    le.PeerID,
+			OriginID:  le.OriginID,
+			SHA256:    le.SHA256,
+		}
 	}
 
-	// Refresh ledger entries for files we already had in sync so a
-	// later user edit is detected via mtime. Use the local entry's
-	// mtime (the actual file on disk) as the baseline: the remote
-	// entry's updated_at is a different clock's value and could be
-	// newer than any local mtime, which would suppress deletes.
+	// Refresh ledger entries for local files the ledger has
+	// never seen — including purely local work — so a later
+	// out-of-band delete of the originator's own file can
+	// become a tombstone (see the scan above). Use the local
+	// entry's mtime (the actual file on disk) as the baseline:
+	// the remote entry's updated_at is a different clock's
+	// value and could be newer than any local mtime, which
+	// would suppress deletes. The local manifest's OriginID
+	// is this peer for local writes, so the entry correctly
+	// claims self-origin.
 	for _, l := range local.Entries {
-		if _, ok := remoteByPath[l.Path]; !ok {
-			continue
-		}
 		if _, ok := ledger.Entries[l.Path]; !ok {
-			ledger.Entries[l.Path] = LedgerEntry{UpdatedAt: l.MTime, PeerID: l.PeerID, SHA256: l.SHA256}
+			ledger.Entries[l.Path] = LedgerEntry{UpdatedAt: l.MTime, PeerID: l.PeerID, OriginID: l.OriginID, SHA256: l.SHA256}
 		}
 	}
 	return ledger.Save()
 }
 
-// localMTime returns the actual mtime of a just-pulled file on disk —
-// the correct "user edited since" baseline for the delete check.
-func localMTime(store *Store, p string) time.Time {
-	abs, err := store.Resolve(p)
-	if err != nil {
-		return time.Time{}
+// originOfEntry resolves an entry's true origin: the manifest's
+// OriginID when the serving peer reported one, else the serving
+// peer (pre-origin manifests).
+func originOfEntry(e Entry, server string) string {
+	if e.OriginID != "" {
+		return e.OriginID
 	}
-	info, err := os.Stat(abs)
-	if err != nil {
-		return time.Time{}
-	}
-	return info.ModTime()
+	return server
 }
 
+// pullOne fetches a blob and writes it, preserving the origin
+// write-time as the file's mtime: copies then build identical
+// manifests to the originator (no mtime drift), so LWW ties are
+// broken by (updated_at, peer_id, sha) deterministically across
+// the mesh instead of by pull order.
 func pullOne(ctx context.Context, store *Store, fetch Fetcher, base string, r Entry) error {
 	data, err := fetch.GetBlob(ctx, base, r.Path)
 	if err != nil {
 		return err
 	}
-	return store.AtomicWrite(r.Path, data, r.SHA256)
+	if err := store.AtomicWrite(r.Path, data, r.SHA256); err != nil {
+		return err
+	}
+	if abs, err := store.Resolve(r.Path); err == nil {
+		_ = os.Chtimes(abs, r.UpdatedAt, r.UpdatedAt)
+	}
+	return nil
 }
 
 // SyncOnce pulls once from every configured peer.
+//
+// A peer that fails to answer does not abort the round: the
+// other peers still apply (a dead mesh member degrades to
+// "offline in UI", never "management dead", CONCEPT req. 9).
+// An error is returned only when every peer failed, so callers
+// can tell "mesh is down" from "mesh is partial". In the
+// single-peer case this is exactly the old behavior.
 func SyncOnce(ctx context.Context, store *Store, ledger *Ledger, fetch Fetcher, peers []string) error {
+	var errs []error
 	for _, base := range peers {
 		m, err := fetch.GetManifest(ctx, base)
 		if err != nil {
-			return fmt.Errorf("sync: peer %s: %w", base, err)
+			errs = append(errs, fmt.Errorf("sync: peer %s: %w", base, err))
+			continue
 		}
 		if err := Apply(ctx, store, ledger, fetch, base, m); err != nil {
 			return fmt.Errorf("sync: apply %s: %w", base, err)
 		}
+	}
+	if len(errs) == len(peers) && len(errs) > 0 {
+		return errs[0]
 	}
 	return nil
 }

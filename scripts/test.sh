@@ -455,6 +455,228 @@ YAML
     fi
 fi
 
+# ---- Layer 2.5: three-peer mesh (fan-in, partition, chain) ------------
+# More than two instances: three peer containers, each configured
+# with the OTHER TWO in FERRIAGE_PEER (full mesh). Proves the
+# sync engine works past the 2-peer shape (ADR 0012 amends 0001):
+#   * fan-in: a stack written on each peer converges everywhere
+#     (including the peer that pulls from two sources at once)
+#   * cross-peer edit: a newer write on one peer converges
+#   * partition: one peer stopped — the other two keep syncing,
+#     and the stopped peer catches up on return ("offline in UI",
+#     never "management dead")
+#   * delete on one propagates to all three
+# Ports 18083-18085 (layer-2 frees 18080/81 before this runs).
+# State dirs are per-run tmp; stacks are plain compose dirs
+# (no containers deployed here — sync is file-level, ADR 0001).
+if [ "$SKIP_CONTAINER" -eq 0 ]; then
+    log "Layer 2.5: three-peer mesh (fan-in, partition, delete)"
+    if [ ! -f go.mod ]; then
+        skip "no peer binary yet — 3-peer mesh skipped"
+    elif ! command -v docker >/dev/null 2>&1; then
+        skip "docker not installed — 3-peer mesh skipped"
+    else
+        set +e
+        MESH_TMP=""
+        MESH_A=""; MESH_B=""; MESH_C=""
+        MESH_SUFFIX=""
+        cleanup_mesh() {
+            [ -n "$MESH_A" ] && docker rm -f "$MESH_A" >/dev/null 2>&1
+            [ -n "$MESH_B" ] && docker rm -f "$MESH_B" >/dev/null 2>&1
+            [ -n "$MESH_C" ] && docker rm -f "$MESH_C" >/dev/null 2>&1
+            if [ -n "$MESH_TMP" ] && [ -d "$MESH_TMP" ]; then
+                docker run --rm --user root -v "$MESH_TMP:/mesh" alpine:3.20 sh -c 'rm -rf /mesh/a /mesh/b /mesh/c /mesh/*.log /mesh/*.id' >/dev/null 2>&1
+                rm -rf "$MESH_TMP" 2>/dev/null || rmdir "$MESH_TMP" 2>/dev/null
+            fi
+        }
+        MESH_TMP="$(mktemp -d /tmp/ferriage-mesh.XXXXXX)" || { bad "mesh: mktemp failed"; MESH_TMP=""; }
+        MESH_SUFFIX="$(head -c4 /dev/urandom | od -An -tx1 | tr -d ' \n')"
+        MESH_A="ferriage-mesh-a-$MESH_SUFFIX"
+        MESH_B="ferriage-mesh-b-$MESH_SUFFIX"
+        MESH_C="ferriage-mesh-c-$MESH_SUFFIX"
+        # Image: reuse the layer-2 build if present (same Dockerfile),
+        # else build it here. docker build is cached, so this is cheap.
+        if ! docker image inspect ferriage:smoke >/dev/null 2>&1; then
+            echo "  building peer image (deploy/Dockerfile)..."
+            if docker build -f deploy/Dockerfile -t ferriage:smoke . >"$MESH_TMP/build.log" 2>&1; then
+                ok "mesh: image build (deploy/Dockerfile)"
+            else
+                bad "mesh: image build (see $MESH_TMP/build.log; kept on failure cleanup)"
+                tail -n 20 "$MESH_TMP/build.log"
+                cleanup_mesh; MESH_TMP=""
+            fi
+        fi
+
+        if [ -n "$MESH_TMP" ]; then
+            mkdir -p "$MESH_TMP/a" "$MESH_TMP/b" "$MESH_TMP/c"
+            # Ports are allocated dynamically (scan for three free
+            # ones above 18100). Hardcoded ports let a stale peer
+            # from an earlier run squat the port and silently
+            # answer health checks for a container that never
+            # bound (host networking) — which poisons the whole
+            # mesh (session 020). Probe, never assume.
+            free_port() {
+                local p=$1
+                while [ "$p" -lt 18200 ]; do
+                    if curl -fsS --max-time 1 "http://127.0.0.1:$p/healthz" >/dev/null 2>&1; then
+                        p=$((p+1)); continue
+                    fi
+                    echo "$p"; return 0
+                done
+                echo ""; return 1
+            }
+            MESH_PA="$(free_port 18100)"; [ -n "$MESH_PA" ] || { bad "mesh: no free port"; cleanup_mesh; MESH_TMP=""; }
+            MESH_PB="$(free_port $((MESH_PA+1)))"; [ -n "$MESH_PB" ] || { bad "mesh: no free port"; cleanup_mesh; MESH_TMP=""; }
+            MESH_PC="$(free_port $((MESH_PB+1)))"; [ -n "$MESH_PC" ] || { bad "mesh: no free port"; cleanup_mesh; MESH_TMP=""; }
+            echo "  mesh ports: A=$MESH_PA B=$MESH_PB C=$MESH_PC"
+            echo "  starting 3 peers in full mesh (each pulls from the other two)..."
+            docker run -d --name "$MESH_A" \
+                --network host \
+                -e FERRIAGE_ADDR=:$MESH_PA \
+                -e FERRIAGE_PEER="http://localhost:$MESH_PB,http://localhost:$MESH_PC" \
+                -e FERRIAGE_SYNC_INTERVAL=500ms \
+                -v "$MESH_TMP/a:/stacks" \
+                -v /var/run/docker.sock:/var/run/docker.sock \
+                ferriage:smoke >"$MESH_TMP/a.id" 2>&1 || cleanup_mesh
+            docker run -d --name "$MESH_B" \
+                --network host \
+                -e FERRIAGE_ADDR=:$MESH_PB \
+                -e FERRIAGE_PEER="http://localhost:$MESH_PA,http://localhost:$MESH_PC" \
+                -e FERRIAGE_SYNC_INTERVAL=500ms \
+                -v "$MESH_TMP/b:/stacks" \
+                -v /var/run/docker.sock:/var/run/docker.sock \
+                ferriage:smoke >"$MESH_TMP/b.id" 2>&1 || cleanup_mesh
+            docker run -d --name "$MESH_C" \
+                --network host \
+                -e FERRIAGE_ADDR=:$MESH_PC \
+                -e FERRIAGE_PEER="http://localhost:$MESH_PA,http://localhost:$MESH_PB" \
+                -e FERRIAGE_SYNC_INTERVAL=500ms \
+                -v "$MESH_TMP/c:/stacks" \
+                -v /var/run/docker.sock:/var/run/docker.sock \
+                ferriage:smoke >"$MESH_TMP/c.id" 2>&1 || cleanup_mesh
+
+            wait_healthy() {
+                local name="$1" port="$2" i
+                for i in $(seq 1 30); do
+                    curl -fsS "http://127.0.0.1:$port/healthz" >/dev/null 2>&1 && return 0
+                    sleep 0.5
+                done
+                echo "  peer $name not healthy; logs:"; docker logs "$name" 2>&1 | tail -n 20
+                return 1
+            }
+            # Identity check: /peer must return THIS run's peer IDs
+            # (fresh state dirs = fresh identities). A port that
+            # answers healthz but holds a stale peer's ID means
+            # something else owns the port — fail loudly instead
+            # of testing a zombie.
+            MESH_ID_A="$(curl -fsS "http://127.0.0.1:$MESH_PA/peer" 2>/dev/null | sed -n 's/.*"peer_id": *"*\([^",}]*\).*/\1/p')"
+            MESH_ID_B="$(curl -fsS "http://127.0.0.1:$MESH_PB/peer" 2>/dev/null | sed -n 's/.*"peer_id": *"*\([^",}]*\).*/\1/p')"
+            MESH_ID_C="$(curl -fsS "http://127.0.0.1:$MESH_PC/peer" 2>/dev/null | sed -n 's/.*"peer_id": *"*\([^",}]*\).*/\1/p')"
+            if wait_healthy "$MESH_A" "$MESH_PA" && wait_healthy "$MESH_B" "$MESH_PB" && wait_healthy "$MESH_C" "$MESH_PC" \
+               && [ -n "$MESH_ID_A" ] && [ -n "$MESH_ID_B" ] && [ -n "$MESH_ID_C" ] \
+               && [ "$MESH_ID_A" != "$MESH_ID_B" ] && [ "$MESH_ID_B" != "$MESH_ID_C" ] && [ "$MESH_ID_A" != "$MESH_ID_C" ]; then
+                ok "mesh: three peers healthy (distinct identities)"
+            else
+                bad "mesh: peers not healthy or identities not distinct"
+            fi
+
+            # --- fan-in: one stack dir written on EACH peer ---------
+            # Stack dirs are root-owned once peers sync them, so
+            # writes go through a root container; the origin write
+            # is a plain cp (state dir starts empty and root-owned
+            # files are only read back via curl/manifest checks).
+            mkstack() { # $1=dest-dir $2=stack $3=content
+                mkdir -p "$1/$2"
+                printf 'services:\n  app:\n    image: alpine:3.20\n    command: ["sh", "-c", "sleep 1000"]\n# %s\n' "$3" > "$1/$2/compose.yaml"
+            }
+            has_file() { # $1=peer-dir $2=stack-path
+                [ -f "$1/$2/compose.yaml" ]
+            }
+            wait_file() { # $1=peer-dir $2=stack-path $3=seconds
+                local i
+                for i in $(seq 1 "$3"); do
+                    has_file "$1" "$2" && return 0
+                    sleep 1
+                done
+                return 1
+            }
+            MESH_STACK_A="mesh-a-$MESH_SUFFIX"
+            MESH_STACK_B="mesh-b-$MESH_SUFFIX"
+            MESH_STACK_C="mesh-c-$MESH_SUFFIX"
+            mkstack "$MESH_TMP/a" "$MESH_STACK_A" "written-on-a"
+            mkstack "$MESH_TMP/b" "$MESH_STACK_B" "written-on-b"
+            mkstack "$MESH_TMP/c" "$MESH_STACK_C" "written-on-c"
+            if wait_file "$MESH_TMP/c" "$MESH_STACK_A" 20 \
+               && wait_file "$MESH_TMP/c" "$MESH_STACK_B" 20 \
+               && wait_file "$MESH_TMP/a" "$MESH_STACK_B" 20 \
+               && wait_file "$MESH_TMP/a" "$MESH_STACK_C" 20 \
+               && wait_file "$MESH_TMP/b" "$MESH_STACK_A" 20 \
+               && wait_file "$MESH_TMP/b" "$MESH_STACK_C" 20; then
+                ok "mesh: fan-in — every stack converged on every peer"
+            else
+                bad "mesh: fan-in — a stack never reached a peer"
+                echo "  a:"; ls "$MESH_TMP/a" 2>&1; echo "  b:"; ls "$MESH_TMP/b" 2>&1; echo "  c:"; ls "$MESH_TMP/c" 2>&1
+            fi
+
+            # --- cross-peer edit: newer write on A converges --------
+            sleep 2
+            docker run --rm --user root -v "$MESH_TMP/a:/stacks" alpine:3.20 sh -c "printf 'services:\n  app:\n    image: alpine:3.20\n    command: [\"sh\", \"-c\", \"sleep 1000\"]\n# edited-on-a-v2\n' > /stacks/$MESH_STACK_A/compose.yaml" >/dev/null 2>&1
+            EDITED=0
+            for i in $(seq 1 20); do
+                if curl -fsS "http://127.0.0.1:$MESH_PC/sync/blob?path=$MESH_STACK_A/compose.yaml" 2>/dev/null | grep -q "edited-on-a-v2"; then EDITED=1; break; fi
+                sleep 1
+            done
+            if [ "$EDITED" -eq 1 ]; then
+                ok "mesh: cross-peer edit converged (A -> C)"
+            else
+                bad "mesh: cross-peer edit did not converge"
+            fi
+
+            # --- partition: stop C; A and B keep converging ---------
+            docker stop "$MESH_C" >/dev/null 2>&1
+            sleep 1
+            MESH_STACK_D="mesh-d-$MESH_SUFFIX"
+            mkstack "$MESH_TMP/a" "$MESH_STACK_D" "written-while-c-down"
+            if wait_file "$MESH_TMP/b" "$MESH_STACK_D" 20; then
+                ok "mesh: partition — A and B sync while C is down"
+            else
+                bad "mesh: partition — A->B sync stalled with C down"
+            fi
+            if has_file "$MESH_TMP/c" "$MESH_STACK_D"; then
+                bad "mesh: partitioned C must not have the new stack"
+            else
+                ok "mesh: partitioned C has no new stack (correctly stale)"
+            fi
+            # C returns: catches up on its next pull rounds.
+            docker start "$MESH_C" >/dev/null 2>&1
+            wait_healthy "$MESH_C" "$MESH_PC"
+            if wait_file "$MESH_TMP/c" "$MESH_STACK_D" 30; then
+                ok "mesh: partition healed — C caught up on return"
+            else
+                bad "mesh: partition healed — C never caught up"
+            fi
+
+            # --- delete on A propagates to B and C ------------------
+            docker run --rm --user root -v "$MESH_TMP/a:/stacks" alpine:3.20 sh -c "rm -rf /stacks/$MESH_STACK_D" >/dev/null 2>&1
+            DELETED=0
+            for i in $(seq 1 30); do
+                if ! has_file "$MESH_TMP/b" "$MESH_STACK_D" && ! has_file "$MESH_TMP/c" "$MESH_STACK_D"; then DELETED=1; break; fi
+                sleep 1
+            done
+            if [ "$DELETED" -eq 1 ]; then
+                ok "mesh: delete on A propagated to B and C"
+            else
+                bad "mesh: delete did not propagate to all peers"
+            fi
+
+            cleanup_mesh
+            MESH_TMP=""
+        fi
+        set -e
+        unset -f wait_healthy mkstack has_file wait_file 2>/dev/null
+    fi
+fi
+
 # ---- Layer 3: Playwright visual baselines (UI only) --------------------
 # Screenshot the live UI (peer + BFF from web/dist, auth off = dev
 # mode) with headless Chrome and pixel-diff against the committed

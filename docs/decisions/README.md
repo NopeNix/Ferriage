@@ -34,3 +34,4 @@ date: YYYY-MM-DD
 | 0009 | [Auto-update (Phase 3 item 6)](0009-auto-update.md) | accepted | per-node digest-poll loop, poll/auto per stack, stateful→poll default, snapshot-before-update, Shoutrrr events |
 | 0010 | [MCP server (Phase 3 item 7)](0010-mcp-server.md) | accepted | hand-rolled MCP Streamable HTTP at POST /mcp (stateless), tools dispatch in-process through the peer mux, BFF OIDC gate |
 | 0011 | [Restic backup (Phase 3 item 8)](0011-restic-backup.md) | accepted | restic CLI-in-peer (docker compose precedent), repo in .ferriage/restic-repo, password env-only, incremental per-stack + node, retention, health-gated restore |
+| 0012 | [Multi-peer sync: origin-gated deletes](0012-multi-peer-sync.md) | accepted | amends 0001: deletes fire only on the origin peer's absence + local-delete tombstones (unanimity vote deadlocks), per-peer error tolerance, content-aware tombstones, additive origin_id wire; 3-peer Go + container tests |

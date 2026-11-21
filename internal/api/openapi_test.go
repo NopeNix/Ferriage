@@ -133,6 +133,7 @@ func TestSchemasMatchGoStructs(t *testing.T) {
 		MTime     time.Time `json:"mtime"`
 		UpdatedAt time.Time `json:"updated_at"`
 		PeerID    string    `json:"peer_id"`
+		OriginID  string    `json:"origin_id,omitempty"`
 	}
 	type syncManifest struct {
 		PeerID      string      `json:"peer_id"`
